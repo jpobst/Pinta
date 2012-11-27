@@ -39,12 +39,14 @@ namespace Pinta.Core
 		private Dictionary<BaseEffect, Gtk.Action> adjustments;
 		private Dictionary<BaseEffect, MenuItem> adjustment_menuitems;
 		private Dictionary<BaseEffect, Gtk.Action> effects;
+		private Dictionary<string, BaseEffect> registered_effects;
 
 		internal EffectsManager ()
 		{
 			adjustments = new Dictionary<BaseEffect, Gtk.Action> ();
 			adjustment_menuitems = new Dictionary<BaseEffect,MenuItem> ();
 			effects = new Dictionary<BaseEffect, Gtk.Action> ();
+			registered_effects = new Dictionary<string,BaseEffect> ();
 		}
 
 		/// <summary>
@@ -102,7 +104,16 @@ namespace Pinta.Core
 			
 			effects.Add (effect, act);
 
+			registered_effects.Add (effect.GetType ().Name, effect);
 			return act;
+		}
+
+		public BaseEffect GetEffect (string name)
+		{
+			if (registered_effects.ContainsKey (name))
+				return registered_effects[name];
+
+			return null;
 		}
 
 		/// <summary>

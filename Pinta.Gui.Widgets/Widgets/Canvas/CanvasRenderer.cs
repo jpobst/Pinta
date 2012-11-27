@@ -127,6 +127,8 @@ namespace Pinta.Gui.Widgets
 				var srcRect = new Gdk.Rectangle (offset, dst.GetBounds ().Size);
 				srcRect.Intersect (src.GetBounds ());
 
+				layer.EnsureUpdated (dst, srcRect);
+
 				// Get pointers to our surfaces
 				var src_ptr = (ColorBgra*)src.DataPtr;
 				var dst_ptr = (ColorBgra*)dst.DataPtr;

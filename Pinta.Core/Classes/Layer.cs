@@ -61,6 +61,7 @@ namespace Pinta.Core
 		public ImageSurface Surface { get; set; }
 		public bool Tiled { get; set; }	
 		public Matrix Transform { get { return transform; } }
+		public virtual bool UseThumbnail { get { return true; } }
 		
 		public static readonly string OpacityProperty = "Opacity";
 		public static readonly string HiddenProperty = "Hidden";
@@ -138,6 +139,11 @@ namespace Pinta.Core
 			ctx.Restore();
 		}
 		
+		public virtual void EnsureUpdated (Cairo.ImageSurface src, Gdk.Rectangle bounds)
+		{
+			// Default layer doesn't do this because surface is always updated
+		}
+
 		/// <summary>
 		/// Rotates layer by the specified angle (in degrees).
 		/// </summary>

@@ -77,7 +77,7 @@ namespace Pinta.Gui.Widgets
 			col.Sizing = TreeViewColumnSizing.Fixed;
 			col.FixedWidth = thumbnail_column_width;
 			tree.AppendColumn (col);
-
+			
 			var textCell = new CellRendererText ();
 			textCell.Ellipsize = Pango.EllipsizeMode.End;
 			col = new TreeViewColumn ("Name", textCell, "text", store_index_name);

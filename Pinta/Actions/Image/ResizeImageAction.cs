@@ -47,16 +47,23 @@ namespace Pinta.Actions
 
 		private void Activated (object sender, EventArgs e)
 		{
-			ResizeImageDialog dialog = new ResizeImageDialog ();
+			var doc = PintaCore.Workspace.ActiveDocument;
 
-			dialog.WindowPosition = Gtk.WindowPosition.CenterOnParent;
+			Cairo.ImageSurface surface = new Cairo.ImageSurface (Cairo.Format.ARGB32, doc.ImageSize.Width, doc.ImageSize.Height);
+			var layer = new Pinta.Core.Classes.BlurLayer () { Name = "Blur", Surface = surface };
 
-			int response = dialog.Run ();
+			PintaCore.Workspace.ActiveDocument.Insert (layer, 1);
 
-			if (response == (int)Gtk.ResponseType.Ok)
-				dialog.SaveChanges ();
+			//ResizeImageDialog dialog = new ResizeImageDialog ();
 
-			dialog.Destroy ();
+			//dialog.WindowPosition = Gtk.WindowPosition.CenterOnParent;
+
+			//int response = dialog.Run ();
+
+			//if (response == (int)Gtk.ResponseType.Ok)
+			//        dialog.SaveChanges ();
+
+			//dialog.Destroy ();
 		}
 	}
 }
