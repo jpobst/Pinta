@@ -1,0 +1,80 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>8.0.30703</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{F8DF7505-B2E8-45CB-B7C4-B1A884BFF582}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Pinta.ImageManipulation</RootNamespace>
+    <AssemblyName>Pinta.ImageManipulation</AssemblyName>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="BaseSurface.cs" />
+    <Compile Include="ISurface.cs" />
+    <Compile Include="PixelOperations\BinaryPixelOp.cs" />
+    <Compile Include="PixelOperations\UnaryPixelOp.cs" />
+    <Compile Include="PixelOperations\UserBlendOp.cs" />
+    <Compile Include="Structs\HsvColor.cs" />
+    <Compile Include="Structs\RgbColor.cs" />
+    <Compile Include="Structs\Size.cs" />
+    <Compile Include="Structs\Rectangle.cs" />
+    <Compile Include="Structs\Point.cs" />
+    <Compile Include="Structs\ColorBgra.cs" />
+    <Compile Include="PixelOperations\PixelOp.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="UnaryPixelOperations\ConstantOp.cs" />
+    <Compile Include="UnaryPixelOperations\BlendConstantOp.cs" />
+    <Compile Include="UnaryPixelOperations\AverageChannelsOp.cs" />
+    <Compile Include="UnaryPixelOperations\ChannelCurveOp.cs" />
+    <Compile Include="UnaryPixelOperations\PosterizePixelOp.cs" />
+    <Compile Include="UnaryPixelOperations\HueSaturationLightnessOp.cs" />
+    <Compile Include="UnaryPixelOperations\LevelOp.cs" />
+    <Compile Include="UnaryPixelOperations\LuminosityCurveOp.cs" />
+    <Compile Include="UnaryPixelOperations\DesaturateOp.cs" />
+    <Compile Include="UnaryPixelOperations\InvertWithAlphaOp.cs" />
+    <Compile Include="UnaryPixelOperations\RedEyeRemoveOp.cs" />
+    <Compile Include="UnaryPixelOperations\SetAlphaChannelTo255Op.cs" />
+    <Compile Include="UnaryPixelOperations\SetAlphaChannelOp.cs" />
+    <Compile Include="UnaryPixelOperations\SetChannelOp.cs" />
+    <Compile Include="UnaryPixelOperations\IdentityOp.cs" />
+    <Compile Include="UnaryPixelOperations\InvertOp.cs" />
+    <Compile Include="Utility.cs" />
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
