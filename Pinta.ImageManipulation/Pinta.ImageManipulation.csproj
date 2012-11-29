@@ -38,6 +38,20 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BaseSurface.cs" />
+    <Compile Include="PixelBlendOperations\AdditiveBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\ColorBurnBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\ColorDodgeBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\ScreenBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\DarkenBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\LightenBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\NegationBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\DifferenceBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\OverlayBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\GlowBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\ReflectBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\MultiplyBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\XorBlendOp.cs" />
+    <Compile Include="PixelBlendOperations\NormalBlendOp.cs" />
     <Compile Include="ISurface.cs" />
     <Compile Include="PixelOperations\BinaryPixelOp.cs" />
     <Compile Include="PixelOperations\UnaryPixelOp.cs" />
