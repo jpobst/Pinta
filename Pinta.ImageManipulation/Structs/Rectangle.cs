@@ -59,7 +59,7 @@ namespace Pinta.ImageManipulation
 		public int Left { get { return X; } }
 		public Point Location { get { return new Point (X, Y); } }
 		public int Right { get { return X + Width - 1; } }
-		public Size Size { get { return new Size (Width, Height); } }
+		public Size Size { get { return new Size (Height, Width); } }
 		public int Top { get { return Y; } }
 
 		public static Rectangle Intersect (Rectangle a, Rectangle b)
@@ -78,8 +78,8 @@ namespace Pinta.ImageManipulation
 
 		public static Rectangle FromLTRB (int left, int top, int right, int bottom)
 		{
-			return new Rectangle (left, top, right - left,
-			bottom - top);
+			return new Rectangle (left, top, right - left + 1,
+			bottom - top + 1);
 		}
 
 		public static bool operator == (Rectangle r1, Rectangle r2)
