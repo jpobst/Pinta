@@ -36,6 +36,7 @@ namespace Pinta.ImageManipulation
 		Rectangle Bounds { get; }
 		int Height { get; }
 		Size Size { get; }
+		int Stride { get; }
 		int Width { get; }
 
 		void BeginUpdate ();
@@ -44,5 +45,6 @@ namespace Pinta.ImageManipulation
 		unsafe ColorBgra* GetPointAddress (int x, int y);
 		unsafe ColorBgra* GetPointAddress (Point point);
 		unsafe ColorBgra* GetRowAddress (int y);
+		unsafe ColorBgra GetPoint (int x, int y);
 	}
 }

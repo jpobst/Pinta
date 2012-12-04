@@ -62,6 +62,21 @@ namespace Pinta.ImageManipulation
 		public Size Size { get { return new Size (Height, Width); } }
 		public int Top { get { return Y; } }
 
+		public bool Contains (int x, int y)
+		{
+			return ((x >= Left) && (x < Right) && (y >= Top) && (y < Bottom));
+		}
+
+		public void Intersect (Rectangle r)
+		{
+			var new_r = Rectangle.Intersect (this, r);
+
+			X = new_r.X;
+			Y = new_r.Y;
+			Width = new_r.Width;
+			Height = new_r.Height;
+		}
+
 		public static Rectangle Intersect (Rectangle a, Rectangle b)
 		{
 			return Rectangle.FromLTRB (

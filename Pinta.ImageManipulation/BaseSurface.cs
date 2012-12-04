@@ -41,6 +41,7 @@ namespace Pinta.ImageManipulation
 		public Rectangle Bounds { get { return new Rectangle (Point.Empty, Size); } }
 		public int Height { get { return height; } }
 		public Size Size { get { return new Size (height, width); } }
+		public abstract int Stride { get; }
 		public int Width { get { return width; } }
 
 		public virtual void BeginUpdate ()
@@ -49,6 +50,11 @@ namespace Pinta.ImageManipulation
 
 		public virtual void EndUpdate ()
 		{			
+		}
+
+		public unsafe ColorBgra GetPoint (int x, int y)
+		{
+			return *(data + (x + (y * width)));
 		}
 
 		public unsafe ColorBgra* GetPointAddress (int x, int y)
