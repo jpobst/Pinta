@@ -15,11 +15,11 @@ namespace Pinta.ImageManipulation.Effects
 {
 	public class PencilSketchEffect : BaseEffect
 	{
-		private GaussianBlurEffect blurEffect;
-		private DesaturateOp desaturateOp;
-		//private InvertColorsEffect invertEffect;
-		//private BrightnessContrastEffect bacAdjustment;
-		private ColorDodgeBlendOp colorDodgeOp;
+		private GaussianBlurEffect blur_effect;
+		private DesaturateOp desaturate_op;
+		private InvertColorsEffect invert_effect;
+		private BrightnessContrastEffect bac_adjustment;
+		private ColorDodgeBlendOp color_dodge_op;
 
 		private int pencil_size;
 		private int color_range;
@@ -34,24 +34,22 @@ namespace Pinta.ImageManipulation.Effects
 			this.pencil_size = pencilSize;
 			this.color_range = colorRange;
 
-			blurEffect = new GaussianBlurEffect (pencil_size);
-			desaturateOp = new DesaturateOp ();
-			//invertEffect = new InvertColorsEffect ();
-			//bacAdjustment = new BrightnessContrastEffect ();
-			colorDodgeOp = new ColorDodgeBlendOp ();
+			blur_effect = new GaussianBlurEffect (pencil_size);
+			desaturate_op = new DesaturateOp ();
+			invert_effect = new InvertColorsEffect ();
+			bac_adjustment = new BrightnessContrastEffect (-color_range, -color_range);
+			color_dodge_op = new ColorDodgeBlendOp ();
 		}
 
 		#region Algorithm Code Ported From PDN
 		public unsafe override void Render (ISurface src, ISurface dest, Rectangle[] rois)
 		{
-			//bacAdjustment.Data.Brightness = -Data.ColorRange;
-			//bacAdjustment.Data.Contrast = -Data.ColorRange;
-			//bacAdjustment.Render (src, dest, rois);
+			bac_adjustment.Render (src, dest, rois);
 
-			blurEffect.Render (src, dest, rois);
+			blur_effect.Render (src, dest, rois);
 
-			//invertEffect.Render (dest, dest, rois);
-			desaturateOp.Apply (dest, dest, rois);
+			invert_effect.Render (dest, dest, rois);
+			desaturate_op.Apply (dest, dest, rois);
 
 			foreach (var roi in rois) {
 				for (int y = roi.Top; y <= roi.Bottom; ++y) {
@@ -59,8 +57,8 @@ namespace Pinta.ImageManipulation.Effects
 					var dstPtr = dest.GetPointAddress (roi.X, y);
 
 					for (int x = roi.Left; x <= roi.Right; ++x) {
-						var srcGrey = desaturateOp.Apply (*srcPtr);
-						var sketched = colorDodgeOp.Apply (srcGrey, *dstPtr);
+						var srcGrey = desaturate_op.Apply (*srcPtr);
+						var sketched = color_dodge_op.Apply (srcGrey, *dstPtr);
 						*dstPtr = sketched;
 
 						++srcPtr;

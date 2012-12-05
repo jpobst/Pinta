@@ -47,7 +47,7 @@ namespace Pinta.ImageManipulation.Effects
 		private int warmth;
 
 		private GaussianBlurEffect blur_effect;
-		//private BrightnessContrastEffect bacAdjustment;
+		private BrightnessContrastEffect bac_adjustment;
 		private DesaturateOp desaturate_op;
 		private OverlayBlendOp overlay_op;
 
@@ -65,7 +65,7 @@ namespace Pinta.ImageManipulation.Effects
 			this.warmth = warmth;
 
 			blur_effect = new GaussianBlurEffect (2);
-			//bacAdjustment = new BrightnessContrastEffect ();
+			bac_adjustment = new BrightnessContrastEffect (0, 0);
 			desaturate_op = new DesaturateOp ();
 			overlay_op = new OverlayBlendOp ();
 		}
@@ -77,7 +77,7 @@ namespace Pinta.ImageManipulation.Effects
 			float blueAdjust = 1.0f - (warmth / 100.0f);
 
 			this.blur_effect.Render (src, dest, rois);
-			//this.bacAdjustment.Render (src, dest, rois);
+			this.bac_adjustment.Render (src, dest, rois);
 
 			foreach (var roi in rois) {
 				for (int y = roi.Top; y <= roi.Bottom; ++y) {

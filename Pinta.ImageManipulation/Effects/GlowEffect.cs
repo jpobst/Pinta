@@ -19,7 +19,7 @@ namespace Pinta.ImageManipulation.Effects
 		private int contrast;
 
 		private GaussianBlurEffect blur_effect;
-		//private BrightnessContrastEffect contrastEffect;
+		private BrightnessContrastEffect contrast_effect;
 		private ScreenBlendOp screen_op;
 
 		public GlowEffect (int radius, int brightness, int contrast)
@@ -36,7 +36,7 @@ namespace Pinta.ImageManipulation.Effects
 			this.contrast = contrast;
 
 			blur_effect = new GaussianBlurEffect (radius);
-			//contrastEffect = new BrightnessContrastEffect ();
+			contrast_effect = new BrightnessContrastEffect (brightness, contrast);
 			screen_op = new ScreenBlendOp ();
 		}
 
@@ -44,10 +44,7 @@ namespace Pinta.ImageManipulation.Effects
 		public unsafe override void Render (ISurface src, ISurface dest, Rectangle[] rois)
 		{
 			blur_effect.Render (src, dest, rois);
-
-			//contrastEffect.Data.Brightness = Data.Brightness;
-			//contrastEffect.Data.Contrast = Data.Contrast;
-			//contrastEffect.Render (dest, dest, rois);
+			contrast_effect.Render (dest, dest, rois);
 
 			foreach (var roi in rois) {
 				for (int y = roi.Top; y <= roi.Bottom; ++y) {
