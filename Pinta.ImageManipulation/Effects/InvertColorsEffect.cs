@@ -8,22 +8,19 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using Pinta.ImageManipulation.UnaryPixelOperations;
 
 namespace Pinta.ImageManipulation.Effects
 {
-	public class Effect : BaseEffect
+	public class InvertColorsEffect : BaseEffect
 	{
-		private int radius;
-
-		public Effect (int radius)
-		{
-			if (radius < 0 || radius > 200)
-				throw new ArgumentOutOfRangeException ("radius");
-
-			this.radius = radius;
-		}
+		private InvertOp op = new InvertOp ();
 
 		#region Algorithm Code Ported From PDN
+		public override void Render (ISurface src, ISurface dest, Rectangle[] rois)
+		{
+			op.Apply (dest, src, rois);
+		}
 		#endregion
 	}
 }

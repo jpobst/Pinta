@@ -43,6 +43,13 @@
     <Compile Include="Effects\BulgeEffect.cs" />
     <Compile Include="Effects\CloudsEffect.cs" />
     <Compile Include="Effects\ColorDifferenceEffect.cs" />
+    <Compile Include="Effects\AutoLevelEffect.cs" />
+    <Compile Include="Effects\BlackAndWhiteEffect.cs" />
+    <Compile Include="Effects\BrightnessContrastEffect.cs" />
+    <Compile Include="Effects\SepiaEffect.cs" />
+    <Compile Include="Effects\InvertColorsEffect.cs" />
+    <Compile Include="Effects\HueSaturationEffect.cs" />
+    <Compile Include="Effects\CurvesEffect.cs" />
     <Compile Include="Effects\EdgeDetectEffect.cs" />
     <Compile Include="Effects\ZoomBlurEffect.cs" />
     <Compile Include="Effects\PolarInversionEffect.cs" />
@@ -72,6 +79,9 @@
     <Compile Include="Effects\InkSketchEffect.cs" />
     <Compile Include="Effects\LocalHistogramEffect.cs" />
     <Compile Include="Enumerations\BlendMode.cs" />
+    <Compile Include="Enumerations\ColorTransferMode.cs" />
+    <Compile Include="Histogram.cs" />
+    <Compile Include="HistogramRGB.cs" />
     <Compile Include="PixelBlendOperations\AdditiveBlendOp.cs" />
     <Compile Include="PixelBlendOperations\ColorBurnBlendOp.cs" />
     <Compile Include="PixelBlendOperations\ColorDodgeBlendOp.cs" />
@@ -90,6 +100,7 @@
     <Compile Include="PixelOperations\BinaryPixelOp.cs" />
     <Compile Include="PixelOperations\UnaryPixelOp.cs" />
     <Compile Include="PixelOperations\UserBlendOp.cs" />
+    <Compile Include="SplineInterpolator.cs" />
     <Compile Include="Structs\PointD.cs" />
     <Compile Include="Structs\HsvColor.cs" />
     <Compile Include="Structs\RgbColor.cs" />
