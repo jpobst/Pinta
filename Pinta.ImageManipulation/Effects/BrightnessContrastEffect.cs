@@ -33,42 +33,73 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dest, Rectangle[] rois)
+		protected override unsafe void Render (ColorBgra* src, ColorBgra* dst, int length)
 		{
-			foreach (var rect in rois) {
-				for (int y = rect.Top; y <= rect.Bottom; y++) {
-					ColorBgra* srcRowPtr = src.GetPointAddress (rect.Left, y);
-					ColorBgra* dstRowPtr = dest.GetPointAddress (rect.Left, y);
-					ColorBgra* dstRowEndPtr = dstRowPtr + rect.Width;
+			ColorBgra* srcRowPtr = src;
+			ColorBgra* dstRowPtr = dst;
+			ColorBgra* dstRowEndPtr = dstRowPtr + length;
 
-					if (divide == 0) {
-						while (dstRowPtr < dstRowEndPtr) {
-							ColorBgra col = *srcRowPtr;
-							int i = col.GetIntensityByte ();
-							uint c = rgbTable[i];
-							dstRowPtr->Bgra = (col.Bgra & 0xff000000) | c | (c << 8) | (c << 16);
+			if (divide == 0) {
+				while (dstRowPtr < dstRowEndPtr) {
+					ColorBgra col = *srcRowPtr;
+					int i = col.GetIntensityByte ();
+					uint c = rgbTable[i];
+					dstRowPtr->Bgra = (col.Bgra & 0xff000000) | c | (c << 8) | (c << 16);
 
-							++dstRowPtr;
-							++srcRowPtr;
-						}
-					} else {
-						while (dstRowPtr < dstRowEndPtr) {
-							ColorBgra col = *srcRowPtr;
-							int i = col.GetIntensityByte ();
-							int shiftIndex = i * 256;
+					++dstRowPtr;
+					++srcRowPtr;
+				}
+			} else {
+				while (dstRowPtr < dstRowEndPtr) {
+					ColorBgra col = *srcRowPtr;
+					int i = col.GetIntensityByte ();
+					int shiftIndex = i * 256;
 
-							col.R = rgbTable[shiftIndex + col.R];
-							col.G = rgbTable[shiftIndex + col.G];
-							col.B = rgbTable[shiftIndex + col.B];
+					col.R = rgbTable[shiftIndex + col.R];
+					col.G = rgbTable[shiftIndex + col.G];
+					col.B = rgbTable[shiftIndex + col.B];
 
-							*dstRowPtr = col;
-							++dstRowPtr;
-							++srcRowPtr;
-						}
-					}
+					*dstRowPtr = col;
+					++dstRowPtr;
+					++srcRowPtr;
 				}
 			}
 		}
+
+		//protected unsafe override void Render (ISurface src, ISurface dest, Rectangle rect)
+		//{
+		//        for (int y = rect.Top; y <= rect.Bottom; y++) {
+		//                ColorBgra* srcRowPtr = src.GetPointAddress (rect.Left, y);
+		//                ColorBgra* dstRowPtr = dest.GetPointAddress (rect.Left, y);
+		//                ColorBgra* dstRowEndPtr = dstRowPtr + rect.Width;
+
+		//                if (divide == 0) {
+		//                        while (dstRowPtr < dstRowEndPtr) {
+		//                                ColorBgra col = *srcRowPtr;
+		//                                int i = col.GetIntensityByte ();
+		//                                uint c = rgbTable[i];
+		//                                dstRowPtr->Bgra = (col.Bgra & 0xff000000) | c | (c << 8) | (c << 16);
+
+		//                                ++dstRowPtr;
+		//                                ++srcRowPtr;
+		//                        }
+		//                } else {
+		//                        while (dstRowPtr < dstRowEndPtr) {
+		//                                ColorBgra col = *srcRowPtr;
+		//                                int i = col.GetIntensityByte ();
+		//                                int shiftIndex = i * 256;
+
+		//                                col.R = rgbTable[shiftIndex + col.R];
+		//                                col.G = rgbTable[shiftIndex + col.G];
+		//                                col.B = rgbTable[shiftIndex + col.B];
+
+		//                                *dstRowPtr = col;
+		//                                ++dstRowPtr;
+		//                                ++srcRowPtr;
+		//                        }
+		//                }
+		//        }
+		//}
 
 		private void Calculate ()
 		{

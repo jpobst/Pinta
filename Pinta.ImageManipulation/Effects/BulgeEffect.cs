@@ -26,7 +26,7 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		unsafe public override void Render (ISurface src, ISurface dst, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dst, Rectangle rect)
 		{
 			float bulge = (float)amount;
 
@@ -38,33 +38,30 @@ namespace Pinta.ImageManipulation.Effects
 			hh = hh + (float)offset.Y * hh;
 			hw = hw + (float)offset.X * hw;
 
-			foreach (var rect in rois) {
+			for (int y = rect.Top; y <= rect.Bottom; y++) {
 
-				for (int y = rect.Top; y <= rect.Bottom; y++) {
+				ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
+				ColorBgra* srcPtr = src.GetPointAddress (rect.Left, y);
+				float v = y - hh;
 
-					ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
-					ColorBgra* srcPtr = src.GetPointAddress (rect.Left, y);
-					float v = y - hh;
+				for (int x = rect.Left; x <= rect.Right; x++) {
+					float u = x - hw;
+					float r = (float)Math.Sqrt (u * u + v * v);
+					float rscale1 = (1f - (r / maxrad));
 
-					for (int x = rect.Left; x <= rect.Right; x++) {
-						float u = x - hw;
-						float r = (float)Math.Sqrt (u * u + v * v);
-						float rscale1 = (1f - (r / maxrad));
+					if (rscale1 > 0) {
+						float rscale2 = 1 - amt * rscale1 * rscale1;
 
-						if (rscale1 > 0) {
-							float rscale2 = 1 - amt * rscale1 * rscale1;
+						float xp = u * rscale2;
+						float yp = v * rscale2;
 
-							float xp = u * rscale2;
-							float yp = v * rscale2;
-
-							*dstPtr = Utility.GetBilinearSampleClamped (src, xp + hw, yp + hh);
-						} else {
-							*dstPtr = *srcPtr;
-						}
-
-						++dstPtr;
-						++srcPtr;
+						*dstPtr = Utility.GetBilinearSampleClamped (src, xp + hw, yp + hh);
+					} else {
+						*dstPtr = *srcPtr;
 					}
+
+					++dstPtr;
+					++srcPtr;
 				}
 			}
 		}

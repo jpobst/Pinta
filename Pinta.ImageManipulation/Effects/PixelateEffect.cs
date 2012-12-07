@@ -24,34 +24,32 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		unsafe public override void Render (ISurface src, ISurface dest, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dest, Rectangle rect)
 		{
-			foreach (var rect in rois) {
-				for (int y = rect.Top; y <= rect.Bottom; ++y) {
-					int yEnd = y + 1;
+			for (int y = rect.Top; y <= rect.Bottom; ++y) {
+				int yEnd = y + 1;
 
-					for (int x = rect.Left; x <= rect.Right; ++x) {
-						var cellRect = GetCellBox (x, y, cell_size);
-						cellRect.Intersect (dest.Bounds);
-						var color = ComputeCellColor (x, y, src, cell_size, src.Bounds);
+				for (int x = rect.Left; x <= rect.Right; ++x) {
+					var cellRect = GetCellBox (x, y, cell_size);
+					cellRect.Intersect (dest.Bounds);
+					var color = ComputeCellColor (x, y, src, cell_size, src.Bounds);
 
-						int xEnd = Math.Min (rect.Right, cellRect.Right);
-						yEnd = Math.Min (rect.Bottom, cellRect.Bottom);
+					int xEnd = Math.Min (rect.Right, cellRect.Right);
+					yEnd = Math.Min (rect.Bottom, cellRect.Bottom);
 
-						for (int y2 = y; y2 <= yEnd; ++y2) {
-							ColorBgra* ptr = dest.GetPointAddress (x, y2);
+					for (int y2 = y; y2 <= yEnd; ++y2) {
+						ColorBgra* ptr = dest.GetPointAddress (x, y2);
 
-							for (int x2 = x; x2 <= xEnd; ++x2) {
-								ptr->Bgra = color.Bgra;
-								++ptr;
-							}
+						for (int x2 = x; x2 <= xEnd; ++x2) {
+							ptr->Bgra = color.Bgra;
+							++ptr;
 						}
-
-						x = xEnd;
 					}
 
-					y = yEnd;
+					x = xEnd;
 				}
+
+				y = yEnd;
 			}
 		}
 

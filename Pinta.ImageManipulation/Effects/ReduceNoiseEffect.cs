@@ -28,10 +28,9 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dest, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dest, Rectangle rect)
 		{
-			foreach (var rect in rois)
-				RenderRect (radius, src, dest, rect);
+			RenderRect (radius, src, dest, rect);
 		}
 
 		public override unsafe ColorBgra Apply (ColorBgra color, int area, int* hb, int* hg, int* hr, int* ha)

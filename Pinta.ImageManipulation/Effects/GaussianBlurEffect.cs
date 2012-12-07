@@ -14,6 +14,7 @@ namespace Pinta.ImageManipulation.Effects
 	public class GaussianBlurEffect : BaseEffect
 	{
 		private int radius;
+		private int[] w;
 
 		public GaussianBlurEffect (int radius)
 		{
@@ -21,6 +22,7 @@ namespace Pinta.ImageManipulation.Effects
 				throw new ArgumentOutOfRangeException ("radius");
 
 			this.radius = radius;
+			w = CreateGaussianBlurRow (radius);
 		}
 
 		#region Algorithm Code Ported From PDN
@@ -38,7 +40,7 @@ namespace Pinta.ImageManipulation.Effects
 			return weights;
 		}
 
-		public unsafe override void Render (ISurface src, ISurface dest, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dest, Rectangle rect)
 		{
 			if (radius == 0) {
 				// Copy src to dest
@@ -46,7 +48,6 @@ namespace Pinta.ImageManipulation.Effects
 			}
 
 			int r = radius;
-			int[] w = CreateGaussianBlurRow (r);
 			int wlen = w.Length;
 
 			int localStoreSize = wlen * 6 * sizeof (long);
@@ -74,7 +75,6 @@ namespace Pinta.ImageManipulation.Effects
 			int src_width = src.Width;
 			int src_height = src.Height;
 
-			foreach (var rect in rois) {
 				if (rect.Height >= 1 && rect.Width >= 1) {
 					for (int y = rect.Top; y <= rect.Bottom; ++y) {
 						//Memory.SetToZero (localStore, (ulong)localStoreSize);
@@ -226,7 +226,6 @@ namespace Pinta.ImageManipulation.Effects
 							++dstPtr;
 						}
 					}
-				}
 			}
 		}
 		#endregion

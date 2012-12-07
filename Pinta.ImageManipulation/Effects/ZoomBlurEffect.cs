@@ -26,7 +26,7 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dst, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dst, Rectangle rect)
 		{
 			if (amount == 0) {
 				// Copy src to dest
@@ -45,58 +45,56 @@ namespace Pinta.ImageManipulation.Effects
 
 			const int n = 64;
 
-			foreach (var rect in rois) {
-				for (int y = rect.Top; y <= rect.Bottom; ++y) {
-					ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
-					ColorBgra* srcPtr = src.GetPointAddress (rect.Left, y);
+			for (int y = rect.Top; y <= rect.Bottom; ++y) {
+				ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
+				ColorBgra* srcPtr = src.GetPointAddress (rect.Left, y);
 
-					for (int x = rect.Left; x <= rect.Right; ++x) {
-						long fx = (x << 16) - fcx;
-						long fy = (y << 16) - fcy;
+				for (int x = rect.Left; x <= rect.Right; ++x) {
+					long fx = (x << 16) - fcx;
+					long fy = (y << 16) - fcy;
 
-						int sr = 0;
-						int sg = 0;
-						int sb = 0;
-						int sa = 0;
-						int sc = 0;
+					int sr = 0;
+					int sg = 0;
+					int sb = 0;
+					int sa = 0;
+					int sc = 0;
 
-						sr += srcPtr->R * srcPtr->A;
-						sg += srcPtr->G * srcPtr->A;
-						sb += srcPtr->B * srcPtr->A;
-						sa += srcPtr->A;
-						++sc;
+					sr += srcPtr->R * srcPtr->A;
+					sg += srcPtr->G * srcPtr->A;
+					sb += srcPtr->B * srcPtr->A;
+					sa += srcPtr->A;
+					++sc;
 
-						for (int i = 0; i < n; ++i) {
-							fx -= ((fx >> 4) * fz) >> 10;
-							fy -= ((fy >> 4) * fz) >> 10;
+					for (int i = 0; i < n; ++i) {
+						fx -= ((fx >> 4) * fz) >> 10;
+						fy -= ((fy >> 4) * fz) >> 10;
 
-							int u = (int)(fx + fcx + 32768 >> 16);
-							int v = (int)(fy + fcy + 32768 >> 16);
+						int u = (int)(fx + fcx + 32768 >> 16);
+						int v = (int)(fy + fcy + 32768 >> 16);
 
-							if (src_bounds.Contains (u, v)) {
-								ColorBgra* srcPtr2 = src.GetPointAddress (u, v);
+						if (src_bounds.Contains (u, v)) {
+							ColorBgra* srcPtr2 = src.GetPointAddress (u, v);
 
-								sr += srcPtr2->R * srcPtr2->A;
-								sg += srcPtr2->G * srcPtr2->A;
-								sb += srcPtr2->B * srcPtr2->A;
-								sa += srcPtr2->A;
-								++sc;
-							}
+							sr += srcPtr2->R * srcPtr2->A;
+							sg += srcPtr2->G * srcPtr2->A;
+							sb += srcPtr2->B * srcPtr2->A;
+							sa += srcPtr2->A;
+							++sc;
 						}
-
-						if (sa != 0) {
-							*dstPtr = ColorBgra.FromBgra (
-							    Utility.ClampToByte (sb / sa),
-							    Utility.ClampToByte (sg / sa),
-							    Utility.ClampToByte (sr / sa),
-							    Utility.ClampToByte (sa / sc));
-						} else {
-							dstPtr->Bgra = 0;
-						}
-
-						++srcPtr;
-						++dstPtr;
 					}
+
+					if (sa != 0) {
+						*dstPtr = ColorBgra.FromBgra (
+							Utility.ClampToByte (sb / sa),
+							Utility.ClampToByte (sg / sa),
+							Utility.ClampToByte (sr / sa),
+							Utility.ClampToByte (sa / sc));
+					} else {
+						dstPtr->Bgra = 0;
+					}
+
+					++srcPtr;
+					++dstPtr;
 				}
 			}
 		}

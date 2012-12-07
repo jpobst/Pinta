@@ -28,7 +28,7 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dst, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dst, Rectangle rect)
 		{
 			PointD start = new PointD (0, 0);
 			double theta = ((double)(angle + 180) * 2 * Math.PI) / 360.0;
@@ -59,26 +59,24 @@ namespace Pinta.ImageManipulation.Effects
 			int src_width = src.Width;
 			int src_height = src.Height;
 
-			foreach (var rect in rois) {
 
-				for (int y = rect.Top; y <= rect.Bottom; ++y) {
-					ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
+			for (int y = rect.Top; y <= rect.Bottom; ++y) {
+				ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
 
-					for (int x = rect.Left; x <= rect.Right; ++x) {
-						int sampleCount = 0;
+				for (int x = rect.Left; x <= rect.Right; ++x) {
+					int sampleCount = 0;
 
-						for (int j = 0; j < points.Length; ++j) {
-							PointD pt = new PointD (points[j].X + (float)x, points[j].Y + (float)y);
+					for (int j = 0; j < points.Length; ++j) {
+						PointD pt = new PointD (points[j].X + (float)x, points[j].Y + (float)y);
 
-							if (pt.X >= 0 && pt.Y >= 0 && pt.X <= (src_width - 1) && pt.Y <= (src_height - 1)) {
-								samples[sampleCount] = Utility.GetBilinearSampleClamped (src, (float)pt.X, (float)pt.Y);
-								++sampleCount;
-							}
+						if (pt.X >= 0 && pt.Y >= 0 && pt.X <= (src_width - 1) && pt.Y <= (src_height - 1)) {
+							samples[sampleCount] = Utility.GetBilinearSampleClamped (src, (float)pt.X, (float)pt.Y);
+							++sampleCount;
 						}
-
-						*dstPtr = ColorBgra.Blend (samples, sampleCount);
-						++dstPtr;
 					}
+
+					*dstPtr = ColorBgra.Blend (samples, sampleCount);
+					++dstPtr;
 				}
 			}
 		}

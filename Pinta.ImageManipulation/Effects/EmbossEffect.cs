@@ -24,69 +24,69 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		unsafe public override void Render (ISurface src, ISurface dst, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dst, Rectangle rect)
 		{
 			double[,] weights = Weights;
 
 			var srcWidth = src.Width;
 			var srcHeight = src.Height;
 
-			foreach (var rect in rois) {
-				// loop through each line of target rectangle
-				for (int y = rect.Top; y <= rect.Bottom; ++y) {
-					int fyStart = 0;
-					int fyEnd = 3;
+			// loop through each line of target rectangle
+			for (int y = rect.Top; y <= rect.Bottom; ++y) {
+				int fyStart = 0;
+				int fyEnd = 3;
 
-					if (y == 0)
-						fyStart = 1;
+				if (y == 0)
+					fyStart = 1;
 
-					if (y == srcHeight - 1)
-						fyEnd = 2;
+				if (y == srcHeight - 1)
+					fyEnd = 2;
 
-					// loop through each point in the line 
-					ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
+				// loop through each point in the line 
+				ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
 
-					for (int x = rect.Left; x <= rect.Right; ++x) {
-						int fxStart = 0;
-						int fxEnd = 3;
+				for (int x = rect.Left; x <= rect.Right; ++x) {
+					int fxStart = 0;
+					int fxEnd = 3;
 
-						if (x == 0)
-							fxStart = 1;
+					if (x == 0)
+						fxStart = 1;
 
-						if (x == srcWidth - 1)
-							fxEnd = 2;
+					if (x == srcWidth - 1)
+						fxEnd = 2;
 
-						// loop through each weight
-						double sum = 0.0;
+					// loop through each weight
+					double sum = 0.0;
 
-						for (int fy = fyStart; fy < fyEnd; ++fy) {
-							for (int fx = fxStart; fx < fxEnd; ++fx) {
-								double weight = weights[fy, fx];
-								ColorBgra c = src.GetPoint (x - 1 + fx, y - 1 + fy);
-								double intensity = (double)c.GetIntensityByte ();
-								sum += weight * intensity;
-							}
+					for (int fy = fyStart; fy < fyEnd; ++fy) {
+						for (int fx = fxStart; fx < fxEnd; ++fx) {
+							double weight = weights[fy, fx];
+							ColorBgra c = src.GetPoint (x - 1 + fx, y - 1 + fy);
+							double intensity = (double)c.GetIntensityByte ();
+							sum += weight * intensity;
 						}
-
-						int iSum = (int)sum;
-						iSum += 128;
-
-						if (iSum > 255)
-							iSum = 255;
-
-						if (iSum < 0)
-							iSum = 0;
-
-						*dstPtr = ColorBgra.FromBgra ((byte)iSum, (byte)iSum, (byte)iSum, 255);
-
-						++dstPtr;
 					}
+
+					int iSum = (int)sum;
+					iSum += 128;
+
+					if (iSum > 255)
+						iSum = 255;
+
+					if (iSum < 0)
+						iSum = 0;
+
+					*dstPtr = ColorBgra.FromBgra ((byte)iSum, (byte)iSum, (byte)iSum, 255);
+
+					++dstPtr;
 				}
 			}
 		}
 
-		private double[,] Weights {
-			get {
+		private double[,] Weights
+		{
+			get
+			{
 				// adjust and convert angle to radians
 				double r = (double)angle * 2.0 * Math.PI / 360.0;
 

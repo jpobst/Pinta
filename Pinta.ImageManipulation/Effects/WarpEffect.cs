@@ -38,7 +38,7 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dst, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dst, Rectangle rect)
 		{
 			ColorBgra colTransparent = ColorBgra.Transparent;
 
@@ -49,74 +49,71 @@ namespace Pinta.ImageManipulation.Effects
 
 			TransformData td;
 
-			foreach (var rect in rois) {
+			for (int y = rect.Top; y <= rect.Bottom; y++) {
+				ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
 
-				for (int y = rect.Top; y <= rect.Bottom; y++) {
-					ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
+				double relativeY = y - center_offset.Y;
 
-					double relativeY = y - center_offset.Y;
+				for (int x = rect.Left; x <= rect.Right; x++) {
+					double relativeX = x - center_offset.X;
 
-					for (int x = rect.Left; x <= rect.Right; x++) {
-						double relativeX = x - center_offset.X;
+					int sampleCount = 0;
 
-						int sampleCount = 0;
+					for (int p = 0; p < aaSampleCount; ++p) {
+						td.X = relativeX + aaPoints[p].X;
+						td.Y = relativeY - aaPoints[p].Y;
 
-						for (int p = 0; p < aaSampleCount; ++p) {
-							td.X = relativeX + aaPoints[p].X;
-							td.Y = relativeY - aaPoints[p].Y;
+						InverseTransform (ref td);
 
-							InverseTransform (ref td);
+						float sampleX = (float)(td.X + center_offset.X);
+						float sampleY = (float)(td.Y + center_offset.Y);
 
-							float sampleX = (float)(td.X + center_offset.X);
-							float sampleY = (float)(td.Y + center_offset.Y);
+						ColorBgra sample = primary_color;
 
-							ColorBgra sample = primary_color;
+						if (IsOnSurface (src, sampleX, sampleY)) {
+							sample = Utility.GetBilinearSampleClamped (src, sampleX, sampleY);
+						} else {
+							switch (edge_behavior) {
+								case WarpEdgeBehavior.Clamp:
+									sample = Utility.GetBilinearSampleClamped (src, sampleX, sampleY);
+									break;
 
-							if (IsOnSurface (src, sampleX, sampleY)) {
-								sample = Utility.GetBilinearSampleClamped (src, sampleX, sampleY);
-							} else {
-								switch (edge_behavior) {
-									case WarpEdgeBehavior.Clamp:
-										sample = Utility.GetBilinearSampleClamped (src, sampleX, sampleY);
-										break;
+								case WarpEdgeBehavior.Wrap:
+									sample = Utility.GetBilinearSampleWrapped (src, sampleX, sampleY);
+									break;
 
-									case WarpEdgeBehavior.Wrap:
-										sample = Utility.GetBilinearSampleWrapped (src, sampleX, sampleY);
-										break;
+								case WarpEdgeBehavior.Reflect:
+									sample = Utility.GetBilinearSampleClamped (src, ReflectCoord (sampleX, src.Width), ReflectCoord (sampleY, src.Height));
 
-									case WarpEdgeBehavior.Reflect:
-										sample = Utility.GetBilinearSampleClamped (src, ReflectCoord (sampleX, src.Width), ReflectCoord (sampleY, src.Height));
+									break;
 
-										break;
+								case WarpEdgeBehavior.Primary:
+									sample = primary_color;
+									break;
 
-									case WarpEdgeBehavior.Primary:
-										sample = primary_color;
-										break;
+								case WarpEdgeBehavior.Secondary:
+									sample = secondary_color;
+									break;
 
-									case WarpEdgeBehavior.Secondary:
-										sample = secondary_color;
-										break;
+								case WarpEdgeBehavior.Transparent:
+									sample = colTransparent;
+									break;
 
-									case WarpEdgeBehavior.Transparent:
-										sample = colTransparent;
-										break;
+								case WarpEdgeBehavior.Original:
+									sample = src.GetPoint (x, y);
+									break;
+								default:
 
-									case WarpEdgeBehavior.Original:
-										sample = src.GetPoint (x, y);
-										break;
-									default:
-
-										break;
-								}
+									break;
 							}
-
-							samples[sampleCount] = sample;
-							++sampleCount;
 						}
 
-						*dstPtr = ColorBgra.Blend (samples, sampleCount);
-						++dstPtr;
+						samples[sampleCount] = sample;
+						++sampleCount;
 					}
+
+					*dstPtr = ColorBgra.Blend (samples, sampleCount);
+					++dstPtr;
 				}
 			}
 		}

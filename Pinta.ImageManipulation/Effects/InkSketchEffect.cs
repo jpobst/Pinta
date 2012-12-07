@@ -57,82 +57,80 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dest, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dest, Rectangle roi)
 		{
 			// Glow backgound 
-			glow_effect.Render (src, dest, rois);
+			glow_effect.Render (src, dest, new Rectangle[] { roi });
 
 			// Create black outlines by finding the edges of objects 
-			foreach (var roi in rois) {
-				for (int y = roi.Top; y <= roi.Bottom; ++y) {
-					int top = y - radius;
-					int bottom = y + radius + 1;
+			for (int y = roi.Top; y <= roi.Bottom; ++y) {
+				int top = y - radius;
+				int bottom = y + radius + 1;
 
-					if (top < 0) {
-						top = 0;
+				if (top < 0) {
+					top = 0;
+				}
+
+				if (bottom > dest.Height) {
+					bottom = dest.Height;
+				}
+
+				ColorBgra* srcPtr = src.GetPointAddress (roi.X, y);
+				ColorBgra* dstPtr = dest.GetPointAddress (roi.X, y);
+
+				for (int x = roi.Left; x <= roi.Right; ++x) {
+					int left = x - radius;
+					int right = x + radius + 1;
+
+					if (left < 0) {
+						left = 0;
 					}
 
-					if (bottom > dest.Height) {
-						bottom = dest.Height;
+					if (right > dest.Width) {
+						right = dest.Width;
 					}
 
-					ColorBgra* srcPtr = src.GetPointAddress (roi.X, y);
-					ColorBgra* dstPtr = dest.GetPointAddress (roi.X, y);
+					int r = 0;
+					int g = 0;
+					int b = 0;
 
-					for (int x = roi.Left; x <= roi.Right; ++x) {
-						int left = x - radius;
-						int right = x + radius + 1;
+					for (int v = top; v < bottom; v++) {
+						ColorBgra* pRow = src.GetRowAddress (v);
+						int j = v - y + radius;
 
-						if (left < 0) {
-							left = 0;
+						for (int u = left; u < right; u++) {
+							int i1 = u - x + radius;
+							int w = conv[j][i1];
+
+							ColorBgra* pRef = pRow + u;
+
+							r += pRef->R * w;
+							g += pRef->G * w;
+							b += pRef->B * w;
 						}
-
-						if (right > dest.Width) {
-							right = dest.Width;
-						}
-
-						int r = 0;
-						int g = 0;
-						int b = 0;
-
-						for (int v = top; v < bottom; v++) {
-							ColorBgra* pRow = src.GetRowAddress (v);
-							int j = v - y + radius;
-
-							for (int u = left; u < right; u++) {
-								int i1 = u - x + radius;
-								int w = conv[j][i1];
-
-								ColorBgra* pRef = pRow + u;
-
-								r += pRef->R * w;
-								g += pRef->G * w;
-								b += pRef->B * w;
-							}
-						}
-
-						ColorBgra topLayer = ColorBgra.FromBgr (
-						    Utility.ClampToByte (b),
-						    Utility.ClampToByte (g),
-						    Utility.ClampToByte (r));
-
-						// Desaturate 
-						topLayer = this.desaturate_op.Apply (topLayer);
-
-						// Adjust Brightness and Contrast 
-						if (topLayer.R > (ink_outline * 255 / 100)) {
-							topLayer = ColorBgra.FromBgra (255, 255, 255, topLayer.A);
-						} else {
-							topLayer = ColorBgra.FromBgra (0, 0, 0, topLayer.A);
-						}
-
-						// Change Blend Mode to Darken 
-						ColorBgra myPixel = this.darken_op.Apply (topLayer, *dstPtr);
-						*dstPtr = myPixel;
-
-						++srcPtr;
-						++dstPtr;
 					}
+
+					ColorBgra topLayer = ColorBgra.FromBgr (
+						Utility.ClampToByte (b),
+						Utility.ClampToByte (g),
+						Utility.ClampToByte (r));
+
+					// Desaturate 
+					topLayer = this.desaturate_op.Apply (topLayer);
+
+					// Adjust Brightness and Contrast 
+					if (topLayer.R > (ink_outline * 255 / 100)) {
+						topLayer = ColorBgra.FromBgra (255, 255, 255, topLayer.A);
+					} else {
+						topLayer = ColorBgra.FromBgra (0, 0, 0, topLayer.A);
+					}
+
+					// Change Blend Mode to Darken 
+					ColorBgra myPixel = this.darken_op.Apply (topLayer, *dstPtr);
+					*dstPtr = myPixel;
+
+					++srcPtr;
+					++dstPtr;
 				}
 			}
 		}

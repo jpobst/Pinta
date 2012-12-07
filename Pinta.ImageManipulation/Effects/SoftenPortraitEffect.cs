@@ -71,31 +71,29 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dest, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dest, Rectangle roi)
 		{
 			float redAdjust = 1.0f + (warmth / 100.0f);
 			float blueAdjust = 1.0f - (warmth / 100.0f);
 
-			this.blur_effect.Render (src, dest, rois);
-			this.bac_adjustment.Render (src, dest, rois);
+			this.blur_effect.Render (src, dest, new Rectangle[] { roi });
+			this.bac_adjustment.Render (src, dest, new Rectangle[] { roi });
 
-			foreach (var roi in rois) {
-				for (int y = roi.Top; y <= roi.Bottom; ++y) {
-					ColorBgra* srcPtr = src.GetPointAddress (roi.X, y);
-					ColorBgra* dstPtr = dest.GetPointAddress (roi.X, y);
+			for (int y = roi.Top; y <= roi.Bottom; ++y) {
+				ColorBgra* srcPtr = src.GetPointAddress (roi.X, y);
+				ColorBgra* dstPtr = dest.GetPointAddress (roi.X, y);
 
-					for (int x = roi.Left; x <= roi.Right; ++x) {
-						ColorBgra srcGrey = this.desaturate_op.Apply (*srcPtr);
+				for (int x = roi.Left; x <= roi.Right; ++x) {
+					ColorBgra srcGrey = this.desaturate_op.Apply (*srcPtr);
 
-						srcGrey.R = Utility.ClampToByte ((int)((float)srcGrey.R * redAdjust));
-						srcGrey.B = Utility.ClampToByte ((int)((float)srcGrey.B * blueAdjust));
+					srcGrey.R = Utility.ClampToByte ((int)((float)srcGrey.R * redAdjust));
+					srcGrey.B = Utility.ClampToByte ((int)((float)srcGrey.B * blueAdjust));
 
-						ColorBgra mypixel = this.overlay_op.Apply (srcGrey, *dstPtr);
-						*dstPtr = mypixel;
+					ColorBgra mypixel = this.overlay_op.Apply (srcGrey, *dstPtr);
+					*dstPtr = mypixel;
 
-						++srcPtr;
-						++dstPtr;
-					}
+					++srcPtr;
+					++dstPtr;
 				}
 			}
 		}

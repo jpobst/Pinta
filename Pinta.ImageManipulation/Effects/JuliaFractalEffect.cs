@@ -36,7 +36,7 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		unsafe public override void Render (ISurface src, ISurface dst, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dst, Rectangle rect)
 		{
 			const double jr = 0.3125;
 			const double ji = 0.03;
@@ -51,45 +51,43 @@ namespace Pinta.ImageManipulation.Effects
 			double invCount = 1.0 / (double)count;
 			double angleTheta = (angle * Math.PI * 2) / 360.0;
 
-			foreach (var rect in rois) {
-				for (int y = rect.Top; y <= rect.Bottom; y++) {
-					ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
+			for (int y = rect.Top; y <= rect.Bottom; y++) {
+				ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
 
-					for (int x = rect.Left; x <= rect.Right; x++) {
-						int r = 0;
-						int g = 0;
-						int b = 0;
-						int a = 0;
+				for (int x = rect.Left; x <= rect.Right; x++) {
+					int r = 0;
+					int g = 0;
+					int b = 0;
+					int a = 0;
 
-						for (double i = 0; i < count; i++) {
-							double u = (2.0 * x - w + (i * invCount)) * invH;
-							double v = (2.0 * y - h + ((i * invQuality) % 1)) * invH;
+					for (double i = 0; i < count; i++) {
+						double u = (2.0 * x - w + (i * invCount)) * invH;
+						double v = (2.0 * y - h + ((i * invQuality) % 1)) * invH;
 
-							double radius = Math.Sqrt ((u * u) + (v * v));
-							double radiusP = radius;
-							double theta = Math.Atan2 (v, u);
-							double thetaP = theta + angleTheta;
+						double radius = Math.Sqrt ((u * u) + (v * v));
+						double radiusP = radius;
+						double theta = Math.Atan2 (v, u);
+						double thetaP = theta + angleTheta;
 
-							double uP = radiusP * Math.Cos (thetaP);
-							double vP = radiusP * Math.Sin (thetaP);
+						double uP = radiusP * Math.Cos (thetaP);
+						double vP = radiusP * Math.Sin (thetaP);
 
-							double jX = (uP - vP * aspect) * invZoom;
-							double jY = (vP + uP * aspect) * invZoom;
+						double jX = (uP - vP * aspect) * invZoom;
+						double jY = (vP + uP * aspect) * invZoom;
 
-							double j = Julia (jX, jY, jr, ji);
+						double j = Julia (jX, jY, jr, ji);
 
-							double c = factor * j;
+						double c = factor * j;
 
-							b += Utility.ClampToByte (c - 768);
-							g += Utility.ClampToByte (c - 512);
-							r += Utility.ClampToByte (c - 256);
-							a += Utility.ClampToByte (c - 0);
-						}
-
-						*dstPtr = ColorBgra.FromBgra (Utility.ClampToByte (b / count), Utility.ClampToByte (g / count), Utility.ClampToByte (r / count), Utility.ClampToByte (a / count));
-
-						++dstPtr;
+						b += Utility.ClampToByte (c - 768);
+						g += Utility.ClampToByte (c - 512);
+						r += Utility.ClampToByte (c - 256);
+						a += Utility.ClampToByte (c - 0);
 					}
+
+					*dstPtr = ColorBgra.FromBgra (Utility.ClampToByte (b / count), Utility.ClampToByte (g / count), Utility.ClampToByte (r / count), Utility.ClampToByte (a / count));
+
+					++dstPtr;
 				}
 			}
 		}

@@ -14,13 +14,16 @@ namespace Pinta.ImageManipulation.Effects
 	public class AddNoiseEffect : BaseEffect
 	{
 		[ThreadStatic]
-		private static Random threadRand = new Random ();
+		private static Random threadRand;
 		private const int tableSize = 16384;
 		private static int[] lookup;
 
 		private int intensity;
 		private int color_saturation;
 		private double coverage;
+
+		int dev;
+		int sat;
 
 		public AddNoiseEffect (int intensity, int colorSaturation, double coverage)
 		{
@@ -34,6 +37,10 @@ namespace Pinta.ImageManipulation.Effects
 			this.intensity = intensity;
 			this.color_saturation = colorSaturation;
 			this.coverage = coverage * 0.01;
+
+			dev = this.intensity * this.intensity / 4;
+			sat = this.color_saturation * 4096 / 100;
+
 		}
 
 		static AddNoiseEffect ()
@@ -42,54 +49,41 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dst, Rectangle[] rois)
+		protected override unsafe void Render (ColorBgra* src, ColorBgra* dst, int length)
 		{
-			int dev = this.intensity * this.intensity / 4;
-			int sat = this.color_saturation * 4096 / 100;
+			if (threadRand == null)
+				threadRand = new Random ();
 
-			if (threadRand == null) {
-				threadRand = new Random (unchecked (System.Threading.Thread.CurrentThread.GetHashCode () ^
-				    unchecked ((int)DateTime.Now.Ticks)));
-			}
-
-			Random localRand = threadRand;
 			int[] localLookup = lookup;
 
-			foreach (var rect in rois) {
-				for (int y = rect.Top; y <= rect.Bottom; ++y) {
-					ColorBgra* srcPtr = src.GetPointAddress (rect.Left, y);
-					ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
+			for (int x = 0; x < length; ++x) {
+				if (threadRand.NextDouble () > coverage) {
+					*dst = *src;
+				} else {
+					int r;
+					int g;
+					int b;
+					int i;
 
-					for (int x = 0; x < rect.Width; ++x) {
-						if (localRand.NextDouble () > this.coverage) {
-							*dstPtr = *srcPtr;
-						} else {
-							int r;
-							int g;
-							int b;
-							int i;
+					r = localLookup[threadRand.Next (tableSize)];
+					g = localLookup[threadRand.Next (tableSize)];
+					b = localLookup[threadRand.Next (tableSize)];
 
-							r = localLookup[localRand.Next (tableSize)];
-							g = localLookup[localRand.Next (tableSize)];
-							b = localLookup[localRand.Next (tableSize)];
-
-							i = (4899 * r + 9618 * g + 1867 * b) >> 14;
+					i = (4899 * r + 9618 * g + 1867 * b) >> 14;
 
 
-							r = i + (((r - i) * sat) >> 12);
-							g = i + (((g - i) * sat) >> 12);
-							b = i + (((b - i) * sat) >> 12);
+					r = i + (((r - i) * sat) >> 12);
+					g = i + (((g - i) * sat) >> 12);
+					b = i + (((b - i) * sat) >> 12);
 
-							dstPtr->R = Utility.ClampToByte (srcPtr->R + ((r * dev + 32768) >> 16));
-							dstPtr->G = Utility.ClampToByte (srcPtr->G + ((g * dev + 32768) >> 16));
-							dstPtr->B = Utility.ClampToByte (srcPtr->B + ((b * dev + 32768) >> 16));
-							dstPtr->A = srcPtr->A;
-						}
-
-						++srcPtr;
-						++dstPtr;
-					}
+					dst->R = Utility.ClampToByte (src->R + ((r * dev + 32768) >> 16));
+					dst->G = Utility.ClampToByte (src->G + ((g * dev + 32768) >> 16));
+					dst->B = Utility.ClampToByte (src->B + ((b * dev + 32768) >> 16));
+					dst->A = src->A;
 				}
+
+				++src;
+				++dst;
 			}
 		}
 

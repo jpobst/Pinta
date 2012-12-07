@@ -100,6 +100,7 @@
     <Compile Include="PixelOperations\BinaryPixelOp.cs" />
     <Compile Include="PixelOperations\UnaryPixelOp.cs" />
     <Compile Include="PixelOperations\UserBlendOp.cs" />
+    <Compile Include="Settings.cs" />
     <Compile Include="SplineInterpolator.cs" />
     <Compile Include="Structs\PointD.cs" />
     <Compile Include="Structs\HsvColor.cs" />

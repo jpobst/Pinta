@@ -30,7 +30,7 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dst, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dst, Rectangle rect)
 		{
 			var pointOffsets = RecalcPointOffsets (fragments, rotation, distance);
 
@@ -45,26 +45,24 @@ namespace Pinta.ImageManipulation.Effects
 			int src_width = src.Width;
 			int src_height = src.Height;
 
-			foreach (Rectangle rect in rois) {
-				for (int y = rect.Top; y <= rect.Bottom; y++) {
-					ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
+			for (int y = rect.Top; y <= rect.Bottom; y++) {
+				ColorBgra* dstPtr = dst.GetPointAddress (rect.Left, y);
 
-					for (int x = rect.Left; x <= rect.Right; x++) {
-						int sampleCount = 0;
+				for (int x = rect.Left; x <= rect.Right; x++) {
+					int sampleCount = 0;
 
-						for (int i = 0; i < poLength; ++i) {
-							int u = x - pointOffsetsPtr[i].X;
-							int v = y - pointOffsetsPtr[i].Y;
+					for (int i = 0; i < poLength; ++i) {
+						int u = x - pointOffsetsPtr[i].X;
+						int v = y - pointOffsetsPtr[i].Y;
 
-							if (u >= 0 && u < src_width && v >= 0 && v < src_height) {
-								samples[sampleCount] = src.GetPoint (u, v);
-								++sampleCount;
-							}
+						if (u >= 0 && u < src_width && v >= 0 && v < src_height) {
+							samples[sampleCount] = src.GetPoint (u, v);
+							++sampleCount;
 						}
-
-						*dstPtr = ColorBgra.Blend (samples, sampleCount);
-						++dstPtr;
 					}
+
+					*dstPtr = ColorBgra.Blend (samples, sampleCount);
+					++dstPtr;
 				}
 			}
 		}
@@ -80,8 +78,8 @@ namespace Pinta.ImageManipulation.Effects
 				double currentRadians = rotationRadians + (pointStep * i);
 
 				pointOffsets[i] = new Point (
-				    (int)Math.Round (distance * -Math.Sin (currentRadians), MidpointRounding.AwayFromZero),
-				    (int)Math.Round (distance * -Math.Cos (currentRadians), MidpointRounding.AwayFromZero));
+					(int)Math.Round (distance * -Math.Sin (currentRadians), MidpointRounding.AwayFromZero),
+					(int)Math.Round (distance * -Math.Cos (currentRadians), MidpointRounding.AwayFromZero));
 			}
 
 			return pointOffsets;

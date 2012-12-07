@@ -21,9 +21,9 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public override void Render (ISurface src, ISurface dst, Rectangle[] rois)
+		protected override void Render (ISurface src, ISurface dst, Rectangle roi)
 		{
-			base.RenderColorDifferenceEffect (Weights, src, dst, rois);
+			base.RenderColorDifferenceEffect (Weights, src, dst, roi);
 		}
 
 		private double[][] Weights {

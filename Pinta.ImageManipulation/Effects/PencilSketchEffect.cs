@@ -42,28 +42,28 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dest, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dest, Rectangle roi)
 		{
+			var rois = new Rectangle[] { roi };
+
 			bac_adjustment.Render (src, dest, rois);
 
 			blur_effect.Render (src, dest, rois);
 
 			invert_effect.Render (dest, dest, rois);
-			desaturate_op.Apply (dest, dest, rois);
+			desaturate_op.Apply (dest, dest, roi);
 
-			foreach (var roi in rois) {
-				for (int y = roi.Top; y <= roi.Bottom; ++y) {
-					var srcPtr = src.GetPointAddress (roi.X, y);
-					var dstPtr = dest.GetPointAddress (roi.X, y);
+			for (int y = roi.Top; y <= roi.Bottom; ++y) {
+				var srcPtr = src.GetPointAddress (roi.X, y);
+				var dstPtr = dest.GetPointAddress (roi.X, y);
 
-					for (int x = roi.Left; x <= roi.Right; ++x) {
-						var srcGrey = desaturate_op.Apply (*srcPtr);
-						var sketched = color_dodge_op.Apply (srcGrey, *dstPtr);
-						*dstPtr = sketched;
+				for (int x = roi.Left; x <= roi.Right; ++x) {
+					var srcGrey = desaturate_op.Apply (*srcPtr);
+					var sketched = color_dodge_op.Apply (srcGrey, *dstPtr);
+					*dstPtr = sketched;
 
-						++srcPtr;
-						++dstPtr;
-					}
+					++srcPtr;
+					++dstPtr;
 				}
 			}
 		}

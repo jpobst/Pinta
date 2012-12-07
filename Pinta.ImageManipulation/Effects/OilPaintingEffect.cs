@@ -28,7 +28,7 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dest, Rectangle[] rois)
+		protected unsafe override void Render (ISurface src, ISurface dest, Rectangle rect)
 		{
 			int width = src.Width;
 			int height = src.Height;
@@ -57,81 +57,78 @@ namespace Pinta.ImageManipulation.Effects
 
 			byte maxIntensity = (byte)coarseness;
 
-			foreach (var rect in rois) {
+			int rectTop = rect.Top;
+			int rectBottom = rect.Bottom;
+			int rectLeft = rect.Left;
+			int rectRight = rect.Right;
 
-				int rectTop = rect.Top;
-				int rectBottom = rect.Bottom;
-				int rectLeft = rect.Left;
-				int rectRight = rect.Right;
+			for (int y = rectTop; y <= rectBottom; ++y) {
+				ColorBgra* dstPtr = dest.GetPointAddress (rect.Left, y);
 
-				for (int y = rectTop; y <= rectBottom; ++y) {
-					ColorBgra* dstPtr = dest.GetPointAddress (rect.Left, y);
+				int top = y - brush_size;
+				int bottom = y + brush_size + 1;
 
-					int top = y - brush_size;
-					int bottom = y + brush_size + 1;
+				if (top < 0) {
+					top = 0;
+				}
 
-					if (top < 0) {
-						top = 0;
+				if (bottom > height) {
+					bottom = height;
+				}
+
+				for (int x = rectLeft; x <= rectRight; ++x) {
+					SetToZero (localStore, (ulong)localStoreSize);
+
+					int left = x - brush_size;
+					int right = x + brush_size + 1;
+
+					if (left < 0) {
+						left = 0;
 					}
 
-					if (bottom > height) {
-						bottom = height;
+					if (right > width) {
+						right = width;
 					}
 
-					for (int x = rectLeft; x <= rectRight; ++x) {
-						SetToZero (localStore, (ulong)localStoreSize);
+					int numInt = 0;
 
-						int left = x - brush_size;
-						int right = x + brush_size + 1;
+					for (int j = top; j < bottom; ++j) {
+						ColorBgra* srcPtr = src.GetPointAddress (left, j);
 
-						if (left < 0) {
-							left = 0;
+						for (int i = left; i < right; ++i) {
+							byte intensity = Utility.FastScaleByteByByte (srcPtr->GetIntensityByte (), maxIntensity);
+
+							++intensityCount[intensity];
+							++numInt;
+
+							avgRed[intensity] += srcPtr->R;
+							avgGreen[intensity] += srcPtr->G;
+							avgBlue[intensity] += srcPtr->B;
+							avgAlpha[intensity] += srcPtr->A;
+
+							++srcPtr;
 						}
-
-						if (right > width) {
-							right = width;
-						}
-
-						int numInt = 0;
-
-						for (int j = top; j < bottom; ++j) {
-							ColorBgra* srcPtr = src.GetPointAddress (left, j);
-
-							for (int i = left; i < right; ++i) {
-								byte intensity = Utility.FastScaleByteByByte (srcPtr->GetIntensityByte (), maxIntensity);
-
-								++intensityCount[intensity];
-								++numInt;
-
-								avgRed[intensity] += srcPtr->R;
-								avgGreen[intensity] += srcPtr->G;
-								avgBlue[intensity] += srcPtr->B;
-								avgAlpha[intensity] += srcPtr->A;
-
-								++srcPtr;
-							}
-						}
-
-						byte chosenIntensity = 0;
-						int maxInstance = 0;
-
-						for (int i = 0; i <= maxIntensity; ++i) {
-							if (intensityCount[i] > maxInstance) {
-								chosenIntensity = (byte)i;
-								maxInstance = intensityCount[i];
-							}
-						}
-
-						// TODO: correct handling of alpha values?
-
-						byte R = (byte)(avgRed[chosenIntensity] / maxInstance);
-						byte G = (byte)(avgGreen[chosenIntensity] / maxInstance);
-						byte B = (byte)(avgBlue[chosenIntensity] / maxInstance);
-						byte A = (byte)(avgAlpha[chosenIntensity] / maxInstance);
-
-						*dstPtr = ColorBgra.FromBgra (B, G, R, A);
-						++dstPtr;
 					}
+
+					byte chosenIntensity = 0;
+					int maxInstance = 0;
+
+					for (int i = 0; i <= maxIntensity; ++i) {
+						if (intensityCount[i] > maxInstance) {
+							chosenIntensity = (byte)i;
+							maxInstance = intensityCount[i];
+						}
+					}
+
+					// TODO: correct handling of alpha values?
+
+					byte R = (byte)(avgRed[chosenIntensity] / maxInstance);
+					byte G = (byte)(avgGreen[chosenIntensity] / maxInstance);
+					byte B = (byte)(avgBlue[chosenIntensity] / maxInstance);
+					byte A = (byte)(avgAlpha[chosenIntensity] / maxInstance);
+
+					*dstPtr = ColorBgra.FromBgra (B, G, R, A);
+					++dstPtr;
 				}
 			}
 		}

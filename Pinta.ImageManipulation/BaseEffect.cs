@@ -25,6 +25,7 @@
 // THE SOFTWARE.
 
 using System;
+using System.Threading.Tasks;
 
 namespace Pinta.ImageManipulation
 {
@@ -38,8 +39,18 @@ namespace Pinta.ImageManipulation
 		/// <param name="rois">An array of rectangles of interest (roi) specifying the area(s) to modify. Only these areas should be modified.</param>
 		public virtual void Render (ISurface src, ISurface dst, Rectangle[] rois)
 		{
-			foreach (var rect in rois)
-				Render (src, dst, rect);
+			foreach (var roi in rois) {
+				if (Settings.SingleThreaded) {
+					for (var y = roi.Y; y <= roi.Bottom; ++y) {
+						Render (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
+					}
+				} else {
+					Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
+						Render (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
+					});
+				}
+
+			}
 		}
 
 		/// <summary>
@@ -50,11 +61,9 @@ namespace Pinta.ImageManipulation
 		/// <param name="roi">A rectangle of interest (roi) specifying the area to modify. Only these areas should be modified</param>
 		protected unsafe virtual void Render (ISurface src, ISurface dst, Rectangle roi)
 		{
-			for (var y = roi.Y; y <= roi.Bottom; ++y) {
-				var srcPtr = src.GetPointAddress (roi.X, y);
-				var dstPtr = dst.GetPointAddress (roi.X, y);
+				var srcPtr = src.GetPointAddress (roi.X, roi.Y);
+				var dstPtr = dst.GetPointAddress (roi.X, roi.Y);
 				Render (srcPtr, dstPtr, roi.Width);
-			}
 		}
 
 		/// <summary>
