@@ -32,23 +32,21 @@ namespace Pinta.ImageManipulation
 	public abstract class BaseEffect
 	{
 		/// <summary>
-		/// Performs the actual work of rendering an effect. Do not call base.Render ().
+		/// Render the effect from the source surface to the destination surface.
 		/// </summary>
-		/// <param name="src">The source surface. DO NOT MODIFY.</param>
+		/// <param name="src">The source surface.</param>
 		/// <param name="dst">The destination surface.</param>
-		/// <param name="rois">An array of rectangles of interest (roi) specifying the area(s) to modify. Only these areas should be modified.</param>
-		public virtual void Render (ISurface src, ISurface dst, Rectangle[] rois)
+		/// <param name="roi">A rectangle of interest (roi) specifying the area(s) to modify. Only these areas should be modified.</param>
+		public virtual void Render (ISurface src, ISurface dst, Rectangle roi)
 		{
-			foreach (var roi in rois) {
-				if (Settings.SingleThreaded) {
-					for (var y = roi.Y; y <= roi.Bottom; ++y) {
-						Render (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
-					}
-				} else {
-					Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
-						Render (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
-					});
+			if (Settings.SingleThreaded) {
+				for (var y = roi.Y; y <= roi.Bottom; ++y) {
+					RenderLine (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
 				}
+			} else {
+				Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
+					RenderLine (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
+				});
 			}
 		}
 
@@ -58,11 +56,11 @@ namespace Pinta.ImageManipulation
 		/// <param name="src">The source surface. DO NOT MODIFY.</param>
 		/// <param name="dst">The destination surface.</param>
 		/// <param name="roi">A rectangle of interest (roi) specifying the area to modify. Only these areas should be modified</param>
-		protected unsafe virtual void Render (ISurface src, ISurface dst, Rectangle roi)
+		protected unsafe virtual void RenderLine (ISurface src, ISurface dst, Rectangle roi)
 		{
-				var srcPtr = src.GetPointAddress (roi.X, roi.Y);
-				var dstPtr = dst.GetPointAddress (roi.X, roi.Y);
-				Render (srcPtr, dstPtr, roi.Width);
+			var srcPtr = src.GetPointAddress (roi.X, roi.Y);
+			var dstPtr = dst.GetPointAddress (roi.X, roi.Y);
+			Render (srcPtr, dstPtr, roi.Width);
 		}
 
 		/// <summary>

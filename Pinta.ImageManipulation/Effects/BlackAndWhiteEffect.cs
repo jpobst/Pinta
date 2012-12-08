@@ -17,7 +17,7 @@ namespace Pinta.ImageManipulation.Effects
 		private DesaturateOp op = new DesaturateOp ();
 
 		#region Algorithm Code Ported From PDN
-		protected override void Render (ISurface src, ISurface dest, Rectangle roi)
+		protected override void RenderLine (ISurface src, ISurface dest, Rectangle roi)
 		{
 			op.Apply (src, dest, roi);
 		}

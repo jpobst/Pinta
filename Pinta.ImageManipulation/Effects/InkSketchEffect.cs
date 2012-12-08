@@ -57,10 +57,10 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		protected unsafe override void Render (ISurface src, ISurface dest, Rectangle roi)
+		protected unsafe override void RenderLine (ISurface src, ISurface dest, Rectangle roi)
 		{
 			// Glow backgound 
-			glow_effect.Render (src, dest, new Rectangle[] { roi });
+			glow_effect.Render (src, dest, roi);
 
 			// Create black outlines by finding the edges of objects 
 			for (int y = roi.Top; y <= roi.Bottom; ++y) {

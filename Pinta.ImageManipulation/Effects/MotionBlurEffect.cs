@@ -28,7 +28,7 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		protected unsafe override void Render (ISurface src, ISurface dst, Rectangle rect)
+		protected unsafe override void RenderLine (ISurface src, ISurface dst, Rectangle rect)
 		{
 			PointD start = new PointD (0, 0);
 			double theta = ((double)(angle + 180) * 2 * Math.PI) / 360.0;

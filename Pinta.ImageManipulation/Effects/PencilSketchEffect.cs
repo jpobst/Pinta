@@ -42,15 +42,11 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		protected unsafe override void Render (ISurface src, ISurface dest, Rectangle roi)
+		protected unsafe override void RenderLine (ISurface src, ISurface dest, Rectangle roi)
 		{
-			var rois = new Rectangle[] { roi };
-
-			bac_adjustment.Render (src, dest, rois);
-
-			blur_effect.Render (src, dest, rois);
-
-			invert_effect.Render (dest, dest, rois);
+			bac_adjustment.Render (src, dest, roi);
+			blur_effect.Render (src, dest, roi);
+			invert_effect.Render (dest, dest, roi);
 			desaturate_op.Apply (dest, dest, roi);
 
 			for (int y = roi.Top; y <= roi.Bottom; ++y) {

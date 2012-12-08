@@ -30,7 +30,7 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		protected unsafe override void Render (ISurface src, ISurface dst, Rectangle rect)
+		protected unsafe override void RenderLine (ISurface src, ISurface dst, Rectangle rect)
 		{
 			int width = dst.Width;
 			int height = dst.Height;

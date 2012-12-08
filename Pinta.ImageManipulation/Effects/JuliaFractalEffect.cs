@@ -36,7 +36,7 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		protected unsafe override void Render (ISurface src, ISurface dst, Rectangle rect)
+		protected unsafe override void RenderLine (ISurface src, ISurface dst, Rectangle rect)
 		{
 			const double jr = 0.3125;
 			const double ji = 0.03;

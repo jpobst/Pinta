@@ -71,13 +71,13 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		protected unsafe override void Render (ISurface src, ISurface dest, Rectangle roi)
+		protected unsafe override void RenderLine (ISurface src, ISurface dest, Rectangle roi)
 		{
 			float redAdjust = 1.0f + (warmth / 100.0f);
 			float blueAdjust = 1.0f - (warmth / 100.0f);
 
-			this.blur_effect.Render (src, dest, new Rectangle[] { roi });
-			this.bac_adjustment.Render (src, dest, new Rectangle[] { roi });
+			this.blur_effect.Render (src, dest, roi);
+			this.bac_adjustment.Render (src, dest, roi);
 
 			for (int y = roi.Top; y <= roi.Bottom; ++y) {
 				ColorBgra* srcPtr = src.GetPointAddress (roi.X, y);

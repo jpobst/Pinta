@@ -52,7 +52,7 @@ namespace Pinta.ImageManipulation.Effects
 
 		#region Algorithm Code Ported From PDN
 		// Adapted to 2-D version in C# from 3-D version in Java from http://mrl.nyu.edu/~perlin/noise/
-		protected override void Render (ISurface src, ISurface dst, Rectangle roi)
+		protected override void RenderLine (ISurface src, ISurface dst, Rectangle roi)
 		{
 			RenderClouds (dst, roi, scale, (byte)(seed), power / 100.0, from_color, to_color);
 			blend_op.Apply (dst, src, dst, roi);

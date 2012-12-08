@@ -28,7 +28,7 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		protected unsafe override void Render (ISurface src, ISurface dst, Rectangle rect)
+		protected unsafe override void RenderLine (ISurface src, ISurface dst, Rectangle rect)
 		{
 			if (angle == 0) {
 				// Copy src to dest

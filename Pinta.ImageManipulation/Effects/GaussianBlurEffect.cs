@@ -40,7 +40,7 @@ namespace Pinta.ImageManipulation.Effects
 			return weights;
 		}
 
-		protected unsafe override void Render (ISurface src, ISurface dest, Rectangle rect)
+		protected unsafe override void RenderLine (ISurface src, ISurface dest, Rectangle rect)
 		{
 			if (radius == 0) {
 				// Copy src to dest
