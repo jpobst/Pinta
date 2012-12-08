@@ -8,6 +8,7 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Pinta.ImageManipulation
@@ -26,24 +27,12 @@ namespace Pinta.ImageManipulation
 			if (dst.Size != src.Size)
 				throw new ArgumentException ("dst.Size != src.Size");
 
-			Apply (src, dst, src.Bounds);
+			ApplyLoop (src, dst, dst.Bounds, CancellationToken.None);
 		}
 
-		public unsafe void Apply (ISurface src, ISurface dst, Rectangle roi)
+		public void Apply (ISurface src, ISurface dst, Rectangle roi)
 		{
-			if (Settings.SingleThreaded || roi.Height <= 1) {
-				for (var y = roi.Y; y <= roi.Bottom; ++y) {
-					var dstPtr = dst.GetRowAddress (y);
-					var srcPtr = src.GetRowAddress (y);
-					Apply (srcPtr, dstPtr, roi.Width);
-				}
-			} else {
-				ParallelExtensions.OrderedFor (roi.Y, roi.Bottom + 1, (y) => {
-					var dstPtr = dst.GetRowAddress (y);
-					var srcPtr = src.GetRowAddress (y);
-					Apply (srcPtr, dstPtr, roi.Width);
-				});
-			}
+			ApplyLoop (src, dst, roi, CancellationToken.None);
 		}
 
 		public void Apply (ISurface lhs, ISurface rhs, ISurface dst)
@@ -54,28 +43,71 @@ namespace Pinta.ImageManipulation
 			if (lhs.Size != rhs.Size)
 				throw new ArgumentException ("lhs.Size != rhs.Size");
 
-			Apply (lhs, rhs, dst, dst.Bounds);
+			ApplyLoop (lhs, rhs, dst, dst.Bounds, CancellationToken.None);
 		}
 
-		public unsafe void Apply (ISurface lhs, ISurface rhs, ISurface dst, Rectangle roi)
+		public void Apply (ISurface lhs, ISurface rhs, ISurface dst, Rectangle roi)
 		{
-			if (Settings.SingleThreaded || roi.Height <= 1) {
-				for (var y = roi.Y; y <= roi.Bottom; ++y) {
-					var dstPtr = dst.GetRowAddress (y);
-					var lhsPtr = lhs.GetRowAddress (y);
-					var rhsPtr = rhs.GetRowAddress (y);
+			ApplyLoop (lhs, rhs, dst, roi, CancellationToken.None);
+		}
 
-					Apply (lhsPtr, rhsPtr, dstPtr, roi.Width);
-				}
-			} else {
-				ParallelExtensions.OrderedFor (roi.Y, roi.Bottom + 1, (y) => {
-					var dstPtr = dst.GetRowAddress (y);
-					var lhsPtr = lhs.GetRowAddress (y);
-					var rhsPtr = rhs.GetRowAddress (y);
+		public Task ApplyAsync (ISurface src, ISurface dst)
+		{
+			if (dst.Size != src.Size)
+				throw new ArgumentException ("dst.Size != src.Size");
 
-					Apply (lhsPtr, rhsPtr, dstPtr, roi.Width);
-				});
-			}
+			return ApplyAsync (src, dst, dst.Bounds, CancellationToken.None);
+		}
+
+		public Task ApplyAsync (ISurface src, ISurface dst, CancellationToken token)
+		{
+			if (dst.Size != src.Size)
+				throw new ArgumentException ("dst.Size != src.Size");
+
+			return ApplyAsync (src, dst, dst.Bounds, token);
+		}
+
+		public Task ApplyAsync (ISurface src, ISurface dst, Rectangle roi)
+		{
+			return ApplyAsync (src, dst, dst.Bounds, CancellationToken.None);
+		}
+
+		public Task ApplyAsync (ISurface src, ISurface dst, Rectangle roi, CancellationToken token)
+		{
+			return Task.Factory.StartNew (() => ApplyLoop (src, dst, dst.Bounds, token));
+		}
+		//
+
+		public Task ApplyAsync (ISurface lhs, ISurface rhs, ISurface dst)
+		{
+			if (dst.Size != lhs.Size)
+				throw new ArgumentException ("dst.Size != lhs.Size");
+
+			if (lhs.Size != rhs.Size)
+				throw new ArgumentException ("lhs.Size != rhs.Size");
+
+			return ApplyAsync (lhs, rhs, dst, dst.Bounds, CancellationToken.None);
+		}
+
+		public Task ApplyAsync (ISurface lhs, ISurface rhs, ISurface dst, CancellationToken token)
+		{
+			if (dst.Size != lhs.Size)
+				throw new ArgumentException ("dst.Size != lhs.Size");
+
+			if (lhs.Size != rhs.Size)
+				throw new ArgumentException ("lhs.Size != rhs.Size");
+
+			return ApplyAsync (lhs, rhs, dst, dst.Bounds, token);
+		}
+
+		public Task ApplyAsync (ISurface lhs, ISurface rhs, ISurface dst, Rectangle roi)
+		{
+			return ApplyAsync (lhs, rhs, dst, roi, CancellationToken.None);
+		}
+
+		public Task ApplyAsync (ISurface lhs, ISurface rhs, ISurface dst, Rectangle roi, CancellationToken token)
+		{
+			return Task.Factory.StartNew (() => ApplyLoop (lhs, rhs, dst, dst.Bounds, token));
 		}
 
 		public virtual void Apply (ColorBgra* lhs, ColorBgra* rhs, ColorBgra* dst, int length)
@@ -100,6 +132,50 @@ namespace Pinta.ImageManipulation
 					++src;
 					--length;
 				}
+			}
+		}
+
+		protected void ApplyLoop (ISurface src, ISurface dst, Rectangle roi, CancellationToken token)
+		{
+			if (Settings.SingleThreaded || roi.Height <= 1) {
+				for (var y = roi.Y; y <= roi.Bottom; ++y) {
+					if (token.IsCancellationRequested)
+						return;
+
+					var dstPtr = dst.GetRowAddress (y);
+					var srcPtr = src.GetRowAddress (y);
+					Apply (srcPtr, dstPtr, roi.Width);
+				}
+			} else {
+				ParallelExtensions.OrderedFor (roi.Y, roi.Bottom + 1, token, (y) => {
+					var dstPtr = dst.GetRowAddress (y);
+					var srcPtr = src.GetRowAddress (y);
+					Apply (srcPtr, dstPtr, roi.Width);
+				});
+			}
+		}
+
+		protected void ApplyLoop (ISurface lhs, ISurface rhs, ISurface dst, Rectangle roi, CancellationToken token)
+		{
+			if (Settings.SingleThreaded || roi.Height <= 1) {
+				for (var y = roi.Y; y <= roi.Bottom; ++y) {
+					if (token.IsCancellationRequested)
+						return;
+
+					var dstPtr = dst.GetRowAddress (y);
+					var lhsPtr = lhs.GetRowAddress (y);
+					var rhsPtr = rhs.GetRowAddress (y);
+
+					Apply (lhsPtr, rhsPtr, dstPtr, roi.Width);
+				}
+			} else {
+				ParallelExtensions.OrderedFor (roi.Y, roi.Bottom + 1, token, (y) => {
+					var dstPtr = dst.GetRowAddress (y);
+					var lhsPtr = lhs.GetRowAddress (y);
+					var rhsPtr = rhs.GetRowAddress (y);
+
+					Apply (lhsPtr, rhsPtr, dstPtr, roi.Width);
+				});
 			}
 		}
 	}

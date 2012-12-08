@@ -48,14 +48,5 @@ namespace Pinta.ImageManipulation
 				body (y);
 			});
 		}
-		public static ParallelLoopResult OrderedFor (int fromInclusive, int toExclusive, Action<int> body)
-		{
-			int i = fromInclusive - 1;
-
-			return Parallel.For (fromInclusive, toExclusive, (x) => {
-				int y = Interlocked.Increment (ref i);
-				body (y);
-			});
-		}
 	}
 }
