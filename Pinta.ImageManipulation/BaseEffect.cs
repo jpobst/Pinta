@@ -36,13 +36,25 @@ namespace Pinta.ImageManipulation
 		/// </summary>
 		/// <param name="src">The source surface.</param>
 		/// <param name="dst">The destination surface.</param>
+		public virtual void Render (ISurface src, ISurface dst)
+		{
+			if (src.Bounds != dst.Bounds)
+				throw new InvalidOperationException ("Source and destination surfaces must be the same size.");
+
+			Render (src, dst, src.Bounds);
+		}
+
+		/// <summary>
+		/// Render the effect from the source surface to the destination surface.
+		/// </summary>
+		/// <param name="src">The source surface.</param>
+		/// <param name="dst">The destination surface.</param>
 		/// <param name="roi">A rectangle of interest (roi) specifying the area(s) to modify. Only these areas should be modified.</param>
 		public virtual void Render (ISurface src, ISurface dst, Rectangle roi)
 		{
-			if (Settings.SingleThreaded) {
-				for (var y = roi.Y; y <= roi.Bottom; ++y) {
+			if (Settings.SingleThreaded || roi.Height == 1) {
+				for (var y = roi.Y; y <= roi.Bottom; ++y)
 					RenderLine (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
-				}
 			} else {
 				Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
 					RenderLine (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
