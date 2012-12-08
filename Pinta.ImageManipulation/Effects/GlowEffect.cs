@@ -41,14 +41,14 @@ namespace Pinta.ImageManipulation.Effects
 		}
 
 		#region Algorithm Code Ported From PDN
-		public unsafe override void Render (ISurface src, ISurface dest, Rectangle roi)
+		protected unsafe override void RenderLine (ISurface src, ISurface dest, Rectangle roi)
 		{
 			blur_effect.Render (src, dest, roi);
 			contrast_effect.Render (dest, dest, roi);
 
-			for (int y = roi.Top; y <= roi.Bottom; ++y) {
-				ColorBgra* dstPtr = dest.GetPointAddress (roi.Left, y);
-				ColorBgra* srcPtr = src.GetPointAddress (roi.Left, y);
+			for (var y = roi.Top; y <= roi.Bottom; ++y) {
+				var dstPtr = dest.GetPointAddress (roi.Left, y);
+				var srcPtr = src.GetPointAddress (roi.Left, y);
 
 				screen_op.Apply (srcPtr, dstPtr, dstPtr, roi.Width);
 			}

@@ -36,6 +36,18 @@ namespace Pinta.ImageManipulation
 		// processing, we want to go mainly in order so the live preview works
 		// sequentially from top to bottom.  It won't be exact, but we just want
 		// something that looks good enough.
+		public static ParallelLoopResult OrderedFor (int fromInclusive, int toExclusive, CancellationToken token, Action<int> body)
+		{
+			int i = fromInclusive - 1;
+
+			return Parallel.For (fromInclusive, toExclusive, (x) => {
+				if (token.IsCancellationRequested)
+					return;
+
+				int y = Interlocked.Increment (ref i);
+				body (y);
+			});
+		}
 		public static ParallelLoopResult OrderedFor (int fromInclusive, int toExclusive, Action<int> body)
 		{
 			int i = fromInclusive - 1;

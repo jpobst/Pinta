@@ -25,6 +25,7 @@
 // THE SOFTWARE.
 
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Pinta.ImageManipulation
@@ -50,13 +51,45 @@ namespace Pinta.ImageManipulation
 		/// <param name="src">The source surface.</param>
 		/// <param name="dst">The destination surface.</param>
 		/// <param name="roi">A rectangle of interest (roi) specifying the area(s) to modify. Only these areas should be modified.</param>
-		public virtual void Render (ISurface src, ISurface dst, Rectangle roi)
+		public void Render (ISurface src, ISurface dst, Rectangle roi)
+		{
+			RenderLoop (src, dst, roi, CancellationToken.None);
+		}
+
+		public Task RenderAsync (ISurface src, ISurface dst)
+		{
+			return RenderAsync (src, dst, CancellationToken.None);
+		}
+
+		public Task RenderAsync (ISurface src, ISurface dst, CancellationToken token)
+		{
+			if (src.Bounds != dst.Bounds)
+				throw new InvalidOperationException ("Source and destination surfaces must be the same size.");
+
+			return Task.Factory.StartNew (() => RenderLoop (src, dst, src.Bounds, token));
+		}
+
+		public Task RenderAsync (ISurface src, ISurface dst, Rectangle roi)
+		{
+			return RenderAsync (src, dst, roi, CancellationToken.None);
+		}
+
+		public Task RenderAsync (ISurface src, ISurface dst, Rectangle roi, CancellationToken token)
+		{
+			return Task.Factory.StartNew (() => RenderLoop (src, dst, roi, token));
+		}
+
+		protected virtual void RenderLoop (ISurface src, ISurface dst, Rectangle roi, CancellationToken token)
 		{
 			if (Settings.SingleThreaded || roi.Height <= 1) {
-				for (var y = roi.Y; y <= roi.Bottom; ++y)
+				for (var y = roi.Y; y <= roi.Bottom; ++y) {
+					if (token.IsCancellationRequested)
+						return;
+
 					RenderLine (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
+				}
 			} else {
-				ParallelExtensions.OrderedFor (roi.Y, roi.Bottom + 1, (y) => {
+				ParallelExtensions.OrderedFor (roi.Y, roi.Bottom + 1, token, (y) => {
 					RenderLine (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
 				});
 			}
