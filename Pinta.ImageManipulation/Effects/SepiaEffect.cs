@@ -23,10 +23,10 @@ namespace Pinta.ImageManipulation.Effects
 				ColorBgra.White);
 
 		#region Algorithm Code Ported From PDN
-		public override void Render (ISurface src, ISurface dest, Rectangle[] rois)
+		protected override void Render (ISurface src, ISurface dest, Rectangle roi)
 		{
-			desat_op.Apply (dest, src, rois);
-			level_op.Apply (dest, dest, rois);
+			desat_op.Apply (src, dest, roi);
+			level_op.Apply (dest, dest, roi);
 		}
 		#endregion
 	}

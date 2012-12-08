@@ -19,6 +19,7 @@ namespace Pinta.ImageManipulation.Effects
 		private BlendMode blend_mode;
 		private ColorBgra from_color;
 		private ColorBgra to_color;
+		private UserBlendOp blend_op;
 
 		// This is so that repetition of the effect with CTRL+F actually shows up differently.
 		//private byte instanceSeed = unchecked ((byte)DateTime.Now.Ticks);
@@ -37,6 +38,8 @@ namespace Pinta.ImageManipulation.Effects
 			this.from_color = fromColor;
 			this.to_color = toColor;
 			this.blend_mode = blendMode;
+
+			blend_op = Utility.GetBlendModeOp (blend_mode);
 		}
 
 		static CloudsEffect ()
@@ -52,9 +55,7 @@ namespace Pinta.ImageManipulation.Effects
 		protected override void Render (ISurface src, ISurface dst, Rectangle roi)
 		{
 			RenderClouds (dst, roi, scale, (byte)(seed), power / 100.0, from_color, to_color);
-
-			var op = Utility.GetBlendModeOp (blend_mode);
-			op.Apply (dst, roi.Location, src, roi.Location, dst, roi.Location, roi.Size);
+			blend_op.Apply (dst, src, dst, roi);
 		}
 
 		private static double Fade (double t)

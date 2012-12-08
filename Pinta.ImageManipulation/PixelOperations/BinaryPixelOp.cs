@@ -16,12 +16,54 @@ namespace Pinta.ImageManipulation
 	/// That is, it is a simple function F that takes two parameters and returns a
 	/// result of the form: c = F(a, b)
 	/// </summary>
-	[Serializable]
 	public unsafe abstract class BinaryPixelOp : PixelOp
 	{
 		public abstract ColorBgra Apply (ColorBgra lhs, ColorBgra rhs);
 
-		public unsafe virtual void Apply (ColorBgra* dst, ColorBgra* lhs, ColorBgra* rhs, int length)
+		public void Apply (ISurface dst, ISurface src)
+		{
+			if (dst.Size != src.Size)
+				throw new ArgumentException ("dst.Size != src.Size");
+
+			Apply (dst, src, src.Bounds);
+		}
+
+		public void Apply (ISurface dst, ISurface src, Rectangle roi)
+		{
+			unsafe {
+				for (var y = roi.Y; y <= roi.Bottom; ++y) {
+					var dstPtr = dst.GetRowAddress (y);
+					var srcPtr = src.GetRowAddress (y);
+					Apply (dstPtr, srcPtr, roi.Width);
+				}
+			}
+		}
+
+		public void Apply (ISurface dst, ISurface lhs, ISurface rhs)
+		{
+			if (dst.Size != lhs.Size)
+				throw new ArgumentException ("dst.Size != lhs.Size");
+
+			if (lhs.Size != rhs.Size)
+				throw new ArgumentException ("lhs.Size != rhs.Size");
+
+			Apply (dst, lhs, rhs, dst.Bounds);
+		}
+
+		public void Apply (ISurface dst, ISurface lhs, ISurface rhs, Rectangle roi)
+		{
+			unsafe {
+				for (var y = roi.Y; y <= roi.Bottom; ++y) {
+					var dstPtr = dst.GetRowAddress (y);
+					var lhsPtr = lhs.GetRowAddress (y);
+					var rhsPtr = rhs.GetRowAddress (y);
+
+					Apply (dstPtr, lhsPtr, rhsPtr, roi.Width);
+				}
+			}
+		}
+
+		public virtual void Apply (ColorBgra* dst, ColorBgra* lhs, ColorBgra* rhs, int length)
 		{
 			unsafe {
 				while (length > 0) {
@@ -30,63 +72,6 @@ namespace Pinta.ImageManipulation
 					++lhs;
 					++rhs;
 					--length;
-				}
-			}
-		}
-
-		/// <summary>
-		/// Provides a default implementation for performing dst = F(lhs, rhs) over some rectangle of interest.
-		/// </summary>
-		/// <param name="dst">The Surface to write pixels to.</param>
-		/// <param name="dstOffset">The pixel offset that defines the upper-left of the rectangle-of-interest for the dst Surface.</param>
-		/// <param name="lhs">The Surface to read pixels from for the lhs parameter given to the method <b>ColorBgra Apply(ColorBgra, ColorBgra)</b>b>.</param></param>
-		/// <param name="lhsOffset">The pixel offset that defines the upper-left of the rectangle-of-interest for the lhs Surface.</param>
-		/// <param name="rhs">The Surface to read pixels from for the rhs parameter given to the method <b>ColorBgra Apply(ColorBgra, ColorBgra)</b></param>
-		/// <param name="rhsOffset">The pixel offset that defines the upper-left of the rectangle-of-interest for the rhs Surface.</param>
-		/// <param name="roiSize">The size of the rectangles-of-interest for all Surfaces.</param>
-		public void Apply (ISurface dst, Point dstOffset,
-				  ISurface lhs, Point lhsOffset,
-				  ISurface rhs, Point rhsOffset,
-				  Size roiSize)
-		{
-			// Bounds checking only enabled in Debug builds.
-#if DEBUG
-			// Create bounding rectangles for each Surface
-			Rectangle dstRect = new Rectangle (dstOffset, roiSize);
-			Rectangle lhsRect = new Rectangle (lhsOffset, roiSize);
-			Rectangle rhsRect = new Rectangle (rhsOffset, roiSize);
-
-			// Clip those rectangles to those Surface's bounding rectangles
-			Rectangle dstClip = Rectangle.Intersect (dstRect, dst.Bounds);
-			Rectangle lhsClip = Rectangle.Intersect (lhsRect, lhs.Bounds);
-			Rectangle rhsClip = Rectangle.Intersect (rhsRect, rhs.Bounds);
-
-			// If any of those Rectangles actually got clipped, then throw an exception
-			if (dstRect != dstClip) {
-				throw new ArgumentOutOfRangeException ("roiSize", "Destination roi out of bounds");
-			}
-
-			if (lhsRect != lhsClip) {
-				throw new ArgumentOutOfRangeException ("roiSize", "lhs roi out of bounds");
-			}
-
-			if (rhsRect != rhsClip) {
-				throw new ArgumentOutOfRangeException ("roiSize", "rhs roi out of bounds");
-			}
-#endif
-
-			// Cache the width and height properties
-			int width = roiSize.Width;
-			int height = roiSize.Height;
-
-			// Do the work.
-			unsafe {
-				for (int row = 0; row < height; ++row) {
-					ColorBgra* dstPtr = dst.GetPointAddress (dstOffset.X, dstOffset.Y + row);
-					ColorBgra* lhsPtr = lhs.GetPointAddress (lhsOffset.X, lhsOffset.Y + row);
-					ColorBgra* rhsPtr = rhs.GetPointAddress (rhsOffset.X, rhsOffset.Y + row);
-
-					Apply (dstPtr, lhsPtr, rhsPtr, width);
 				}
 			}
 		}
@@ -101,51 +86,6 @@ namespace Pinta.ImageManipulation
 					--length;
 				}
 			}
-		}
-
-		public override void Apply (ISurface dst, Point dstOffset, ISurface src, Point srcOffset, int roiLength)
-		{
-			Apply (dst.GetPointAddress (dstOffset), src.GetPointAddress (srcOffset), roiLength);
-		}
-
-		public void Apply (ISurface dst, ISurface src)
-		{
-			if (dst.Size != src.Size) {
-				throw new ArgumentException ("dst.Size != src.Size");
-			}
-
-			unsafe {
-				for (int y = 0; y < dst.Height; ++y) {
-					ColorBgra* dstPtr = dst.GetRowAddress (y);
-					ColorBgra* srcPtr = src.GetRowAddress (y);
-					Apply (dstPtr, srcPtr, dst.Width);
-				}
-			}
-		}
-
-		public void Apply (ISurface dst, ISurface lhs, ISurface rhs)
-		{
-			if (dst.Size != lhs.Size) {
-				throw new ArgumentException ("dst.Size != lhs.Size");
-			}
-
-			if (lhs.Size != rhs.Size) {
-				throw new ArgumentException ("lhs.Size != rhs.Size");
-			}
-
-			unsafe {
-				for (int y = 0; y < dst.Height; ++y) {
-					ColorBgra* dstPtr = dst.GetRowAddress (y);
-					ColorBgra* lhsPtr = lhs.GetRowAddress (y);
-					ColorBgra* rhsPtr = rhs.GetRowAddress (y);
-
-					Apply (dstPtr, lhsPtr, rhsPtr, dst.Width);
-				}
-			}
-		}
-
-		protected BinaryPixelOp ()
-		{
 		}
 	}
 }

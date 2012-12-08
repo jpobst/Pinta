@@ -16,20 +16,52 @@ namespace Pinta.ImageManipulation
 	/// That is, it is a simple function F that takes one parameter and returns a
 	/// result of the form: d = F(c)
 	/// </summary>
-	[Serializable]
 	public unsafe abstract class UnaryPixelOp : PixelOp
 	{
 		public abstract ColorBgra Apply (ColorBgra color);
 
-		public unsafe override void Apply (ColorBgra* dst, ColorBgra* src, int length)
+		public void Apply (ISurface surface)
 		{
-			unsafe {
-				while (length > 0) {
-					*dst = Apply (*src);
-					++dst;
-					++src;
-					--length;
+			Apply (surface, surface.Bounds);
+		}
+
+		public void Apply (ISurface surface, Rectangle roi)
+		{
+			if (Settings.SingleThreaded) {
+				for (var y = roi.Y; y <= roi.Bottom; ++y) {
+					var dstPtr = surface.GetPointAddress (roi.X, y);
+					Apply (dstPtr, roi.Width);
 				}
+			} else {
+				Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
+					var dstPtr = surface.GetPointAddress (roi.X, y);
+					Apply (dstPtr, roi.Width);
+				});
+			}
+		}
+
+		public void Apply (ISurface src, ISurface dst)
+		{
+			if (src.Bounds != dst.Bounds)
+				throw new InvalidOperationException ("Source and destination surfaces must be the same size or use an overload with a specified bounds.");
+
+			Apply (src, dst, src.Bounds);
+		}
+
+		public void Apply (ISurface src, ISurface dst, Rectangle roi)
+		{
+			if (Settings.SingleThreaded) {
+				for (var y = roi.Y; y <= roi.Bottom; ++y) {
+					var dstPtr = dst.GetPointAddress (roi.X, y);
+					var srcPtr = src.GetPointAddress (roi.X, y);
+					Apply (dstPtr, srcPtr, roi.Width);
+				}
+			} else {
+				Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
+					var dstPtr = dst.GetPointAddress (roi.X, y);
+					var srcPtr = src.GetPointAddress (roi.X, y);
+					Apply (dstPtr, srcPtr, roi.Width);
+				});
 			}
 		}
 
@@ -44,58 +76,16 @@ namespace Pinta.ImageManipulation
 			}
 		}
 
-		private unsafe void ApplyRectangle (ISurface surface, Rectangle rect)
+		public unsafe override void Apply (ColorBgra* dst, ColorBgra* src, int length)
 		{
-			Parallel.For (rect.Top, rect.Bottom, (i) => {
-				Apply (surface.GetRowAddress (i), rect.Width);
-			});
-			//for (var y = rect.Top; y <= rect.Bottom; ++y) {
-			//        var ptr = surface.GetRowAddress (y);
-			//        Apply (ptr, rect.Width);
-			//}
-		}
-
-		public void Apply (ISurface surface, Rectangle[] roi, int startIndex, int length)
-		{
-			Rectangle regionBounds = Utility.GetRegionBounds (roi, startIndex, length);
-
-			if (regionBounds != Rectangle.Intersect (surface.Bounds, regionBounds))
-				throw new ArgumentOutOfRangeException ("roi", "Region is out of bounds");
-
 			unsafe {
-				for (int x = startIndex; x < startIndex + length; ++x)
-					ApplyRectangle (surface, roi[x]);
+				while (length > 0) {
+					*dst = Apply (*src);
+					++dst;
+					++src;
+					--length;
+				}
 			}
-		}
-
-		public void Apply (ISurface surface, Rectangle[] roi)
-		{
-			Apply (surface, roi, 0, roi.Length);
-		}
-
-		public unsafe void Apply (ISurface surface, Rectangle roi)
-		{
-			ApplyRectangle (surface, roi);
-		}
-
-		public override void Apply (ISurface dst, Point dstOffset, ISurface src, Point srcOffset, int scanLength)
-		{
-			Apply (dst.GetPointAddress (dstOffset), src.GetPointAddress (srcOffset), scanLength);
-		}
-
-		public void Apply (ISurface dst, ISurface src, Rectangle roi)
-		{
-			for (int y = roi.Y; y <= roi.Bottom; ++y) {
-				ColorBgra* dstPtr = dst.GetPointAddress (roi.X, y);
-				ColorBgra* srcPtr = src.GetPointAddress (roi.X, y);
-				Apply (dstPtr, srcPtr, roi.Width);
-			}
-		}
-
-		public void Apply (ISurface dst, ISurface src, Rectangle[] rois)
-		{
-			foreach (Rectangle roi in rois)
-				Apply (dst, src, roi);
 		}
 	}
 }

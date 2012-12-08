@@ -49,7 +49,6 @@ namespace Pinta.ImageManipulation
 						Render (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
 					});
 				}
-
 			}
 		}
 

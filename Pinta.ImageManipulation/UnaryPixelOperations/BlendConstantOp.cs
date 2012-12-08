@@ -36,5 +36,13 @@ namespace Pinta.ImageManipulation.UnaryPixelOperations
 
 			return ColorBgra.FromBgra ((byte)b, (byte)g, (byte)r, a2);
 		}
+
+		/// <summary>
+		/// Computes alpha for r OVER l operation.
+		/// </summary>
+		private static byte ComputeAlpha (byte la, byte ra)
+		{
+			return (byte)(((la * (256 - (ra + (ra >> 7)))) >> 8) + ra);
+		}
 	}
 }

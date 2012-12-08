@@ -17,17 +17,17 @@ namespace Pinta.ImageManipulation.Effects
 		private LevelOp op;
 
 		#region Algorithm Code Ported From PDN
-		public override void Render (ISurface src, ISurface dest, Rectangle[] rois)
+		protected override void Render (ISurface src, ISurface dest, Rectangle roi)
 		{
 			if (op == null) {
 				HistogramRgb histogram = new HistogramRgb ();
-				histogram.UpdateHistogram (src, new Rectangle (0, 0, src.Width, src.Height));
+				histogram.UpdateHistogram (src, src.Bounds);
 
 				op = histogram.MakeLevelsAuto ();
 			}
 
 			if (op.isValid)
-				op.Apply (dest, src, rois);
+				op.Apply (src, dest, roi);
 		}
 		#endregion
 	}
