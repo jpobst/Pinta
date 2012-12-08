@@ -12,6 +12,6 @@ namespace Pinta.ImageManipulation
 {
 	public abstract class PixelOp
 	{
-		public unsafe abstract void Apply (ColorBgra* dst, ColorBgra* src, int length);
+		public unsafe abstract void Apply (ColorBgra* src, ColorBgra* dst, int length);
 	}
 }

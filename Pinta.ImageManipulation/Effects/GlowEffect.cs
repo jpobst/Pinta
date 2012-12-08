@@ -50,7 +50,7 @@ namespace Pinta.ImageManipulation.Effects
 				ColorBgra* dstPtr = dest.GetPointAddress (roi.Left, y);
 				ColorBgra* srcPtr = src.GetPointAddress (roi.Left, y);
 
-				screen_op.Apply (dstPtr, srcPtr, dstPtr, roi.Width);
+				screen_op.Apply (srcPtr, dstPtr, dstPtr, roi.Width);
 			}
 		}
 		#endregion

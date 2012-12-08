@@ -52,7 +52,7 @@ namespace Pinta.ImageManipulation
 		/// <param name="roi">A rectangle of interest (roi) specifying the area(s) to modify. Only these areas should be modified.</param>
 		public virtual void Render (ISurface src, ISurface dst, Rectangle roi)
 		{
-			if (Settings.SingleThreaded || roi.Height == 1) {
+			if (Settings.SingleThreaded || roi.Height <= 1) {
 				for (var y = roi.Y; y <= roi.Bottom; ++y)
 					RenderLine (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
 			} else {

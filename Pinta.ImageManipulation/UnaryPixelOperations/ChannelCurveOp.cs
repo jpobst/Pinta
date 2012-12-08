@@ -32,7 +32,7 @@ namespace Pinta.ImageManipulation.UnaryPixelOperations
 			return ColorBgra.FromBgra (CurveB[color.B], CurveG[color.G], CurveR[color.R], color.A);
 		}
 
-		public override unsafe void Apply (ColorBgra* dst, ColorBgra* src, int length)
+		public override unsafe void Apply (ColorBgra* src, ColorBgra* dst, int length)
 		{
 			while (--length >= 0) {
 				dst->B = CurveB[src->B];

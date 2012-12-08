@@ -33,7 +33,7 @@ namespace Pinta.ImageManipulation.UnaryPixelOperations
 			return ColorBgra.FromUInt32 ((color.Bgra & 0x00ffffff) + add_value);
 		}
 
-		public override unsafe void Apply (ColorBgra* dst, ColorBgra* src, int length)
+		public override unsafe void Apply (ColorBgra* src, ColorBgra* dst, int length)
 		{
 			while (length > 0) {
 				dst->Bgra = (src->Bgra & 0x00ffffff) + add_value;

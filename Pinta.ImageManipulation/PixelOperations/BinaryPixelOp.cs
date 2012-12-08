@@ -8,6 +8,7 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Threading.Tasks;
 
 namespace Pinta.ImageManipulation
 {
@@ -20,26 +21,32 @@ namespace Pinta.ImageManipulation
 	{
 		public abstract ColorBgra Apply (ColorBgra lhs, ColorBgra rhs);
 
-		public void Apply (ISurface dst, ISurface src)
+		public void Apply (ISurface src, ISurface dst)
 		{
 			if (dst.Size != src.Size)
 				throw new ArgumentException ("dst.Size != src.Size");
 
-			Apply (dst, src, src.Bounds);
+			Apply (src, dst, src.Bounds);
 		}
 
-		public void Apply (ISurface dst, ISurface src, Rectangle roi)
+		public unsafe void Apply (ISurface src, ISurface dst, Rectangle roi)
 		{
-			unsafe {
+			if (Settings.SingleThreaded || roi.Height <= 1) {
 				for (var y = roi.Y; y <= roi.Bottom; ++y) {
 					var dstPtr = dst.GetRowAddress (y);
 					var srcPtr = src.GetRowAddress (y);
-					Apply (dstPtr, srcPtr, roi.Width);
+					Apply (srcPtr, dstPtr, roi.Width);
 				}
+			} else {
+				Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
+					var dstPtr = dst.GetRowAddress (y);
+					var srcPtr = src.GetRowAddress (y);
+					Apply (srcPtr, dstPtr, roi.Width);
+				});
 			}
 		}
 
-		public void Apply (ISurface dst, ISurface lhs, ISurface rhs)
+		public void Apply (ISurface lhs, ISurface rhs, ISurface dst)
 		{
 			if (dst.Size != lhs.Size)
 				throw new ArgumentException ("dst.Size != lhs.Size");
@@ -47,23 +54,31 @@ namespace Pinta.ImageManipulation
 			if (lhs.Size != rhs.Size)
 				throw new ArgumentException ("lhs.Size != rhs.Size");
 
-			Apply (dst, lhs, rhs, dst.Bounds);
+			Apply (lhs, rhs, dst, dst.Bounds);
 		}
 
-		public void Apply (ISurface dst, ISurface lhs, ISurface rhs, Rectangle roi)
+		public unsafe void Apply (ISurface lhs, ISurface rhs, ISurface dst, Rectangle roi)
 		{
-			unsafe {
+			if (Settings.SingleThreaded || roi.Height <= 1) {
 				for (var y = roi.Y; y <= roi.Bottom; ++y) {
 					var dstPtr = dst.GetRowAddress (y);
 					var lhsPtr = lhs.GetRowAddress (y);
 					var rhsPtr = rhs.GetRowAddress (y);
 
-					Apply (dstPtr, lhsPtr, rhsPtr, roi.Width);
+					Apply (lhsPtr, rhsPtr, dstPtr, roi.Width);
 				}
+			} else {
+				Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
+					var dstPtr = dst.GetRowAddress (y);
+					var lhsPtr = lhs.GetRowAddress (y);
+					var rhsPtr = rhs.GetRowAddress (y);
+
+					Apply (lhsPtr, rhsPtr, dstPtr, roi.Width);
+				});
 			}
 		}
 
-		public virtual void Apply (ColorBgra* dst, ColorBgra* lhs, ColorBgra* rhs, int length)
+		public virtual void Apply (ColorBgra* lhs, ColorBgra* rhs, ColorBgra* dst, int length)
 		{
 			unsafe {
 				while (length > 0) {
@@ -76,7 +91,7 @@ namespace Pinta.ImageManipulation
 			}
 		}
 
-		public unsafe override void Apply (ColorBgra* dst, ColorBgra* src, int length)
+		public unsafe override void Apply (ColorBgra* src, ColorBgra* dst, int length)
 		{
 			unsafe {
 				while (length > 0) {

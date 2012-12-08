@@ -55,7 +55,7 @@ namespace Pinta.ImageManipulation.Effects
 		protected override void RenderLine (ISurface src, ISurface dst, Rectangle roi)
 		{
 			RenderClouds (dst, roi, scale, (byte)(seed), power / 100.0, from_color, to_color);
-			blend_op.Apply (dst, src, dst, roi);
+			blend_op.Apply (src, dst, dst, roi);
 		}
 
 		private static double Fade (double t)

@@ -42,7 +42,7 @@ namespace Pinta.ImageManipulation.UnaryPixelOperations
 			}
 		}
 
-		public unsafe override void Apply (ColorBgra* dst, ColorBgra* src, int length)
+		public unsafe override void Apply (ColorBgra* src, ColorBgra* dst, int length)
 		{
 			while (length > 0) {
 				dst->B = blue_levels[src->B];

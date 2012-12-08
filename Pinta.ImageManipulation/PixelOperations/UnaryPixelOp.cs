@@ -27,7 +27,7 @@ namespace Pinta.ImageManipulation
 
 		public void Apply (ISurface surface, Rectangle roi)
 		{
-			if (Settings.SingleThreaded) {
+			if (Settings.SingleThreaded || roi.Height <= 1) {
 				for (var y = roi.Y; y <= roi.Bottom; ++y) {
 					var dstPtr = surface.GetPointAddress (roi.X, y);
 					Apply (dstPtr, roi.Width);
@@ -54,13 +54,13 @@ namespace Pinta.ImageManipulation
 				for (var y = roi.Y; y <= roi.Bottom; ++y) {
 					var dstPtr = dst.GetPointAddress (roi.X, y);
 					var srcPtr = src.GetPointAddress (roi.X, y);
-					Apply (dstPtr, srcPtr, roi.Width);
+					Apply (srcPtr, dstPtr, roi.Width);
 				}
 			} else {
 				Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
 					var dstPtr = dst.GetPointAddress (roi.X, y);
 					var srcPtr = src.GetPointAddress (roi.X, y);
-					Apply (dstPtr, srcPtr, roi.Width);
+					Apply (srcPtr, dstPtr, roi.Width);
 				});
 			}
 		}
@@ -76,7 +76,7 @@ namespace Pinta.ImageManipulation
 			}
 		}
 
-		public unsafe override void Apply (ColorBgra* dst, ColorBgra* src, int length)
+		public unsafe override void Apply (ColorBgra* src, ColorBgra* dst, int length)
 		{
 			unsafe {
 				while (length > 0) {

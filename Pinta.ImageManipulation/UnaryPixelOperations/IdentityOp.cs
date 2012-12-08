@@ -23,7 +23,7 @@ namespace Pinta.ImageManipulation.UnaryPixelOperations
 			return color;
 		}
 
-		public unsafe override void Apply (ColorBgra* dst, ColorBgra* src, int length)
+		public unsafe override void Apply (ColorBgra* src, ColorBgra* dst, int length)
 		{
 			for (int i = 0; i < length; i++) {
 				*dst = *src;
