@@ -82,6 +82,7 @@
     <Compile Include="Enumerations\ColorTransferMode.cs" />
     <Compile Include="Histogram.cs" />
     <Compile Include="HistogramRGB.cs" />
+    <Compile Include="ParallelExtensions.cs" />
     <Compile Include="PixelBlendOperations\AdditiveBlendOp.cs" />
     <Compile Include="PixelBlendOperations\ColorBurnBlendOp.cs" />
     <Compile Include="PixelBlendOperations\ColorDodgeBlendOp.cs" />

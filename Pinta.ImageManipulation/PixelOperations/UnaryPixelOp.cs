@@ -33,7 +33,7 @@ namespace Pinta.ImageManipulation
 					Apply (dstPtr, roi.Width);
 				}
 			} else {
-				Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
+				ParallelExtensions.OrderedFor (roi.Y, roi.Bottom + 1, (y) => {
 					var dstPtr = surface.GetPointAddress (roi.X, y);
 					Apply (dstPtr, roi.Width);
 				});
@@ -57,7 +57,7 @@ namespace Pinta.ImageManipulation
 					Apply (srcPtr, dstPtr, roi.Width);
 				}
 			} else {
-				Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
+				ParallelExtensions.OrderedFor (roi.Y, roi.Bottom + 1, (y) => {
 					var dstPtr = dst.GetPointAddress (roi.X, y);
 					var srcPtr = src.GetPointAddress (roi.X, y);
 					Apply (srcPtr, dstPtr, roi.Width);

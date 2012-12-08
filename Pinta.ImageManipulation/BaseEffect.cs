@@ -56,7 +56,7 @@ namespace Pinta.ImageManipulation
 				for (var y = roi.Y; y <= roi.Bottom; ++y)
 					RenderLine (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
 			} else {
-				Parallel.For (roi.Y, roi.Bottom + 1, (y) => {
+				ParallelExtensions.OrderedFor (roi.Y, roi.Bottom + 1, (y) => {
 					RenderLine (src, dst, new Rectangle (roi.X, y, roi.Width, 1));
 				});
 			}
