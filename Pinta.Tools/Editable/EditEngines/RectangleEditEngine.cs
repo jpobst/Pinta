@@ -49,10 +49,8 @@ namespace Pinta.Tools
 
         }
 
-		protected override ShapeEngine CreateShape(bool ctrlKey, bool clickedOnControlPoint, PointD prevSelPoint)
+        protected override ShapeEngine CreateShape (Document doc, bool ctrlKey, bool clickedOnControlPoint, PointD prevSelPoint)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
-
 			ShapeEngine newEngine = new LineCurveSeriesEngine(doc.CurrentUserLayer, null, BaseEditEngine.ShapeTypes.ClosedLineCurveSeries,
 				owner.UseAntialiasing, true, BaseEditEngine.OutlineColor, BaseEditEngine.FillColor, owner.EditEngine.BrushWidth);
 

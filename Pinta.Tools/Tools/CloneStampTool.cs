@@ -71,7 +71,7 @@ namespace Pinta.Tools
 
 		protected override void OnMouseDown (Gtk.DrawingArea canvas, Gtk.ButtonPressEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			// We only do stuff with the left mouse button
 			if (args.Event.Button != 1)
@@ -99,7 +99,7 @@ namespace Pinta.Tools
 
 		protected override void OnMouseMove (object o, Gtk.MotionNotifyEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas ((Gtk.DrawingArea)o);
 
 			if (!painting || offset.IsNotSet ())
 				return;
@@ -134,7 +134,7 @@ namespace Pinta.Tools
 
 		protected override void OnMouseUp (Gtk.DrawingArea canvas, Gtk.ButtonReleaseEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			painting = false;
 

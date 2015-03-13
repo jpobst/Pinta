@@ -149,7 +149,7 @@ namespace Pinta.Tools
 
 		protected override void OnMouseMove (object o, Gtk.MotionNotifyEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas ((DrawingArea)o);
 
 			if (mouse_button == 1) {
 				stroke_color = PintaCore.Palette.PrimaryColor;

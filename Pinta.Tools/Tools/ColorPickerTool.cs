@@ -163,7 +163,7 @@ namespace Pinta.Tools
 		#region Mouse Handlers
 		protected override void OnMouseDown (Gtk.DrawingArea canvas, Gtk.ButtonPressEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			if (args.Event.Button == 1)
 				button_down = 1;
@@ -173,7 +173,7 @@ namespace Pinta.Tools
 			if (!doc.Workspace.PointInCanvas (point))
 				return;
 
-			var color = GetColorFromPoint (point);
+			var color = GetColorFromPoint (doc, point);
 
 			if (button_down == 1)
 				PintaCore.Palette.PrimaryColor = color;
@@ -183,7 +183,7 @@ namespace Pinta.Tools
 
 		protected override void OnMouseMove (object o, Gtk.MotionNotifyEventArgs args, PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas ((Gtk.DrawingArea)o);
 
 			if (button_down == 0)
 				return;
@@ -191,7 +191,7 @@ namespace Pinta.Tools
 			if (!doc.Workspace.PointInCanvas (point))
 				return;
 
-			var color = GetColorFromPoint (point);
+			var color = GetColorFromPoint (doc, point);
 
 			if (button_down == 1)
 				PintaCore.Palette.PrimaryColor = color;
@@ -211,17 +211,16 @@ namespace Pinta.Tools
 		#endregion
 
 		#region Private Methods
-		private unsafe Color GetColorFromPoint (PointD point)
+        private unsafe Color GetColorFromPoint (Document doc, PointD point)
 		{
-			var pixels = GetPixelsFromPoint (point);
+			var pixels = GetPixelsFromPoint (doc, point);
 
 			fixed (ColorBgra* ptr = pixels)
 				return ColorBgra.Blend (ptr, pixels.Length).ToCairoColor ();
 		}
 
-		private ColorBgra[] GetPixelsFromPoint (PointD point)
+		private ColorBgra[] GetPixelsFromPoint (Document doc, PointD point)
 		{
-			var doc = PintaCore.Workspace.ActiveDocument;
 			var x = (int)point.X;
 			var y = (int)point.Y;
 			var size = SampleSize;
@@ -229,7 +228,7 @@ namespace Pinta.Tools
 
 			// Short circuit for single pixel
 			if (size == 1)
-				return new ColorBgra[] { GetPixel (x, y) };
+				return new ColorBgra[] { GetPixel (doc, x, y) };
 
 			// Find the pixels we need (clamp to the size of the image)
 			var rect = new Gdk.Rectangle (x - half, y - half, size, size);
@@ -239,17 +238,17 @@ namespace Pinta.Tools
 
 			for (int i = rect.Left; i <= rect.GetRight (); i++)
 				for (int j = rect.Top; j <= rect.GetBottom (); j++)
-					pixels.Add (GetPixel (i, j));
+					pixels.Add (GetPixel (doc, i, j));
 
 			return pixels.ToArray ();
 		}
 
-		private ColorBgra GetPixel (int x, int y)
+        private ColorBgra GetPixel (Document doc, int x, int y)
 		{
 			if (SampleLayerOnly)
-				return PintaCore.Workspace.ActiveDocument.CurrentUserLayer.Surface.GetColorBgraUnchecked (x, y);
+				return doc.CurrentUserLayer.Surface.GetColorBgraUnchecked (x, y);
 			else
-				return PintaCore.Workspace.ActiveDocument.GetComputedPixel (x, y);
+				return doc.GetComputedPixel (x, y);
 		}
 		#endregion
 	}

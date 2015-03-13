@@ -57,7 +57,7 @@ namespace Pinta.Tools
 			if (active)
 				return;
 
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			// Don't scroll if the whole canvas fits (no scrollbars)
 			if (!doc.Workspace.CanvasFitsInWindow)
@@ -74,7 +74,7 @@ namespace Pinta.Tools
 		protected override void OnMouseMove (object o, Gtk.MotionNotifyEventArgs args, PointD point)
 		{
 			if (active) {
-				Document doc = PintaCore.Workspace.ActiveDocument;
+                var doc = PintaCore.Workspace.GetDocumentFromCanvas ((Gtk.DrawingArea)o);
 
 				doc.Workspace.ScrollCanvas ((int)(last_point.X - args.Event.XRoot), (int)(last_point.Y - args.Event.YRoot));
 				last_point = new PointD (args.Event.XRoot, args.Event.YRoot);

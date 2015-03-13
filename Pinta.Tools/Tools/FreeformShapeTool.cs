@@ -103,7 +103,7 @@ namespace Pinta.Tools
 		#region Mouse Handlers
 		protected override void OnMouseDown (Gtk.DrawingArea canvas, Gtk.ButtonPressEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			surface_modified = false;
 			undo_surface = doc.CurrentUserLayer.Surface.Clone ();
@@ -115,7 +115,7 @@ namespace Pinta.Tools
 
 		protected override void OnMouseMove (object o, Gtk.MotionNotifyEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas ((DrawingArea)o);
 
 			if ((args.Event.State & Gdk.ModifierType.Button1Mask) == Gdk.ModifierType.Button1Mask) {
 				outline_color = PintaCore.Palette.PrimaryColor;
@@ -187,7 +187,7 @@ namespace Pinta.Tools
 
 		protected override void OnMouseUp (Gtk.DrawingArea canvas, Gtk.ButtonReleaseEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
             doc.ToolLayer.Clear ();
 			doc.ToolLayer.Hidden = true;
 

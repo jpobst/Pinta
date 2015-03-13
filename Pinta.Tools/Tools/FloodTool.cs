@@ -102,7 +102,7 @@ namespace Pinta.Tools
 		#region Mouse Handlers
 		protected override void OnMouseDown (Gtk.DrawingArea canvas, Gtk.ButtonPressEventArgs args, PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			Point pos = new Point ((int)point.X, (int)point.Y);
 
@@ -134,13 +134,13 @@ namespace Pinta.Tools
 				else
 					FillStencilByColor (surface, stencilBuffer, surface.GetColorBgraUnchecked (pos.X, pos.Y), tol, out boundingBox, currentRegion, LimitToSelection);
 
-				OnFillRegionComputed (stencilBuffer);
+				OnFillRegionComputed (doc, stencilBuffer);
 
 				// If a derived tool is only going to use the stencil,
 				// don't waste time building the polygon set
 				if (CalculatePolygonSet) {
 					Point[][] polygonSet = stencilBuffer.CreatePolygonSet (boundingBox, 0, 0);
-					OnFillRegionComputed (polygonSet);
+					OnFillRegionComputed (doc, polygonSet);
 				}
 			}
 		}
@@ -348,8 +348,8 @@ namespace Pinta.Tools
 			boundingBox = new Rectangle (left, top, right - left + 1, bottom - top + 1);
 		}
 
-		protected virtual void OnFillRegionComputed (Point[][] polygonSet) {}
-		protected virtual void OnFillRegionComputed (IBitVector2D stencil) {}
+        protected virtual void OnFillRegionComputed (Document doc, Point[][] polygonSet) { }
+        protected virtual void OnFillRegionComputed (Document doc, IBitVector2D stencil) { }
 		#endregion
 	}
 }

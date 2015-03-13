@@ -91,7 +91,7 @@ namespace Pinta.Tools
 		#region Mouse Handlers
 		protected override void OnMouseDown (DrawingArea canvas, ButtonPressEventArgs args, PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			doc.ToolLayer.Clear ();
 			stencil = new bool[doc.ImageSize.Width, doc.ImageSize.Height];
@@ -101,7 +101,7 @@ namespace Pinta.Tools
 		
 		protected unsafe override void OnMouseMove (object o, Gtk.MotionNotifyEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas ((DrawingArea)o);
 
 			ColorBgra old_color;
 			ColorBgra new_color;

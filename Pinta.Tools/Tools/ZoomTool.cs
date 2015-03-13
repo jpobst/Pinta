@@ -69,12 +69,10 @@ namespace Pinta.Tools
             cursorZoomPan = new Gdk.Cursor (Gdk.Display.Default, PintaCore.Resources.GetIcon ("Tools.Pan.png"), 0, 0);
 		}
 
-		protected void UpdateRectangle (PointD point)
+        protected void UpdateRectangle (Document doc, PointD point)
 		{
 			if (!is_drawing)
 				return;
-
-			Document doc = PintaCore.Workspace.ActiveDocument;
 
 			Rectangle r = PointsToRectangle (shape_origin, point);
 			Rectangle dirty;
@@ -124,14 +122,14 @@ namespace Pinta.Tools
 		{
 			base.OnMouseMove (o, args, point);
 
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas ((Gtk.DrawingArea)o);
 
 			if (mouseDown == 1) {
 				if (Math.Abs (shape_origin.X - point.X) > tolerance || Math.Abs (shape_origin.Y - point.Y) > tolerance)  // if they've moved the mouse more than 10 pixels since they clicked
 					is_drawing = true;
 					
 				//still draw rectangle after we have draw it one time...
-				UpdateRectangle (point);
+				UpdateRectangle (doc, point);
 			} else if (mouseDown == 2) {
 				doc.Workspace.ScrollCanvas ((int)((shape_origin.X - point.X) * doc.Workspace.Scale), (int)((shape_origin.Y - point.Y) * doc.Workspace.Scale));
 			}
@@ -139,7 +137,7 @@ namespace Pinta.Tools
 
 		protected override void OnMouseUp (Gtk.DrawingArea canvas, Gtk.ButtonReleaseEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			double x = point.X;
 			double y = point.Y;

@@ -65,8 +65,8 @@ namespace Pinta.Tools
 			if (is_drawing)
 				return;
 
-			Document doc = PintaCore.Workspace.ActiveDocument;
-			hist = new SelectionHistoryItem(Icon, Name);
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
+            hist = new SelectionHistoryItem (Icon, Name);
 			hist.TakeSnapshot();
 
 			reset_origin = args.Event.GetPoint();
@@ -93,7 +93,7 @@ namespace Pinta.Tools
 		
 		protected override void OnMouseUp (DrawingArea canvas, ButtonReleaseEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			// If the user didn't move the mouse, they want to deselect
 			int tolerance = 0;
@@ -107,14 +107,14 @@ namespace Pinta.Tools
 				doc.ToolLayer.Clear ();
 			} else {
                 ClearHandles (doc.ToolLayer);
-				ReDraw(args.Event.State);
+				ReDraw(doc, args.Event.State);
 				if (doc.Selection != null)
 				{
                     SelectionModeHandler.PerformSelectionMode (combine_mode, doc.Selection.SelectionPolygons);
 
                     doc.Selection.Origin = shape_origin;
                     doc.Selection.End = shape_end;
-					PintaCore.Workspace.Invalidate();
+					doc.Workspace.Invalidate();
 				}
                 if (hist != null)
                 {
@@ -150,7 +150,7 @@ namespace Pinta.Tools
 
 		protected override void OnMouseMove (object o, MotionNotifyEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas ((DrawingArea)o);
 
 			if (!is_drawing)
 			{
@@ -164,12 +164,12 @@ namespace Pinta.Tools
 
             ClearHandles (doc.ToolLayer);
             RefreshHandler ();
-            ReDraw (args.Event.State);
+            ReDraw (doc, args.Event.State);
 			
 			if (doc.Selection != null)
 			{
 			    SelectionModeHandler.PerformSelectionMode (combine_mode, doc.Selection.SelectionPolygons);
-				PintaCore.Workspace.Invalidate();
+				doc.Workspace.Invalidate();
 			}
 		}
 
@@ -185,10 +185,8 @@ namespace Pinta.Tools
 			controls[7].Position = new PointD ((shape_origin.X + shape_end.X) / 2, shape_end.Y);
 		}
 
-		public void ReDraw (Gdk.ModifierType state)
+        public void ReDraw (Document doc, Gdk.ModifierType state)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
-
 			doc.ShowSelection = true;
 			doc.ToolLayer.Hidden = false;
 			bool constraint = (state & Gdk.ModifierType.ShiftMask) == Gdk.ModifierType.ShiftMask;
@@ -208,7 +206,7 @@ namespace Pinta.Tools
 			}
 
 			Cairo.Rectangle rect = Utility.PointsToRectangle (shape_origin, shape_end, constraint);
-			Cairo.Rectangle dirty = DrawShape (rect, doc.SelectionLayer);
+			var dirty = DrawShape (doc, rect, doc.SelectionLayer);
 
             DrawHandler (doc.ToolLayer);
 
@@ -370,7 +368,7 @@ namespace Pinta.Tools
 		    ClearHandles (doc.ToolLayer);
 			RefreshHandler();
             DrawHandler (doc.ToolLayer);
-			PintaCore.Workspace.Invalidate();
+            doc.Workspace.Invalidate ();
 		}
 
         /// <summary>

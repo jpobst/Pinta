@@ -80,17 +80,15 @@ namespace Pinta.Tools
 
 		protected override void OnMouseDown(Gtk.DrawingArea canvas, Gtk.ButtonPressEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
             combine_mode = PintaCore.Workspace.SelectionHandler.DetermineCombineMode (args);
 
 			base.OnMouseDown(canvas, args, point);
 			doc.ShowSelection = true;
 		}
 
-		protected override void OnFillRegionComputed(Point[][] polygonSet)
+        protected override void OnFillRegionComputed (Document doc, Point[][] polygonSet)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
-
 			SelectionHistoryItem undoAction = new SelectionHistoryItem(this.Icon, this.Name);
 			undoAction.TakeSnapshot();
 

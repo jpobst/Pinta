@@ -756,8 +756,8 @@ namespace Pinta.Tools
 
 			//Redraw the previously (and possibly currently) active shape without any control points in case another shape is made active.
 			DrawActiveShape(false, false, false, false, false);
-			
-            Document doc = PintaCore.Workspace.ActiveDocument;
+
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
             shape_origin = new PointD(Utility.Clamp(point.X, 0, doc.ImageSize.Width - 1), Utility.Clamp(point.Y, 0, doc.ImageSize.Height - 1));
             current_point = shape_origin;
@@ -925,7 +925,7 @@ namespace Pinta.Tools
 						doc.CurrentUserLayer.Surface.Clone(), doc.CurrentUserLayer, SelectedPointIndex, SelectedShapeIndex, false));
 
 					//Create the shape, add its starting points, and add it to SEngines.
-					SEngines.Add(CreateShape(ctrlKey, clickedOnControlPoint, prevSelPoint));
+					SEngines.Add(CreateShape(doc, ctrlKey, clickedOnControlPoint, prevSelPoint));
 
 					//Select the new shape.
 					SelectedShapeIndex = SEngines.Count - 1;
@@ -1894,7 +1894,7 @@ namespace Pinta.Tools
 		/// <param name="ctrlKey"></param>
 		/// <param name="clickedOnControlPoint"></param>
 		/// <param name="prevSelPoint"></param>
-		protected abstract ShapeEngine CreateShape(bool ctrlKey, bool clickedOnControlPoint, PointD prevSelPoint);
+		protected abstract ShapeEngine CreateShape(Document doc, bool ctrlKey, bool clickedOnControlPoint, PointD prevSelPoint);
 
         protected virtual void MovePoint(List<ControlPoint> controlPoints)
         {

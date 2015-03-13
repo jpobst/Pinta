@@ -163,7 +163,7 @@ namespace Pinta.Tools
 			if (is_drawing)
 				return;
 
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			shape_origin = point;
 			current_point = point;
@@ -187,7 +187,7 @@ namespace Pinta.Tools
 
 		protected override void OnMouseUp (Gtk.DrawingArea canvas, Gtk.ButtonReleaseEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			double x = point.X;
 			double y = point.Y;
@@ -195,14 +195,14 @@ namespace Pinta.Tools
 			current_point = point;
 			doc.ToolLayer.Hidden = true;
 
-			DrawShape (Utility.PointsToRectangle (shape_origin, new PointD (x, y), args.Event.IsShiftPressed ()), doc.CurrentUserLayer, args.Event.IsShiftPressed ());
+			DrawShape (doc, Utility.PointsToRectangle (shape_origin, new PointD (x, y), args.Event.IsShiftPressed ()), doc.CurrentUserLayer, args.Event.IsShiftPressed ());
 			
 			doc.Workspace.Invalidate (last_dirty.ToGdkRectangle ());
 			
 			is_drawing = false;
 
 			if (surface_modified)
-				doc.History.PushNewItem (CreateHistoryItem ());
+				doc.History.PushNewItem (CreateHistoryItem (doc));
 			else if (undo_surface != null)
 				(undo_surface as IDisposable).Dispose ();
 
@@ -214,7 +214,7 @@ namespace Pinta.Tools
 			if (!is_drawing)
 				return;
 
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas ((Gtk.DrawingArea)o);
 
 			current_point = point;
 			double x = point.X;
@@ -223,7 +223,7 @@ namespace Pinta.Tools
 			doc.ToolLayer.Clear ();
 
 			bool shiftkey_pressed = (args.Event.State & Gdk.ModifierType.ShiftMask) == Gdk.ModifierType.ShiftMask;
-			Rectangle dirty = DrawShape (Utility.PointsToRectangle (shape_origin, new PointD (x, y), shiftkey_pressed), doc.ToolLayer, shiftkey_pressed);
+			Rectangle dirty = DrawShape (doc, Utility.PointsToRectangle (shape_origin, new PointD (x, y), shiftkey_pressed), doc.ToolLayer, shiftkey_pressed);
 
 			// Increase the size of the dirty rect to account for antialiasing.
 			if (UseAntialiasing) {
@@ -243,7 +243,7 @@ namespace Pinta.Tools
 		#endregion
 
 		#region Virtual Methods
-		protected virtual Rectangle DrawShape (Rectangle r, Layer l)
+		protected virtual Rectangle DrawShape (Document doc, Rectangle r, Layer l)
 		{
 			return r;
 		}
@@ -251,14 +251,14 @@ namespace Pinta.Tools
 		/// <summary>
 		/// Override this to implement features on shift, like line snapping.
 		/// </summary>
-		protected virtual Rectangle DrawShape (Rectangle r, Layer l, bool shiftkey_pressed)
+		protected virtual Rectangle DrawShape (Document doc, Rectangle r, Layer l, bool shiftkey_pressed)
 		{
-			return DrawShape (r, l);
+			return DrawShape (doc, r, l);
 		}
 		
-		protected virtual BaseHistoryItem CreateHistoryItem ()
+		protected virtual BaseHistoryItem CreateHistoryItem (Document doc)
 		{
-			return new SimpleHistoryItem (Icon, Name, undo_surface, PintaCore.Workspace.ActiveDocument.CurrentUserLayerIndex);
+			return new SimpleHistoryItem (Icon, Name, undo_surface, doc.CurrentUserLayerIndex);
 		}
 		#endregion
 

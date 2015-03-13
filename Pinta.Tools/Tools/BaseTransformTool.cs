@@ -50,19 +50,19 @@ namespace Pinta.Tools
 
 		#region Implemenation
 
-		protected abstract Cairo.Rectangle GetSourceRectangle();
+		protected abstract Cairo.Rectangle GetSourceRectangle(Document doc);
 
-		protected virtual void OnStartTransform()
+		protected virtual void OnStartTransform (Document doc)
 		{
-			source_rect = GetSourceRectangle();
+			source_rect = GetSourceRectangle(doc);
 			transform.InitIdentity();
 		}
 
-		protected virtual void OnUpdateTransform(Matrix transform)
+		protected virtual void OnUpdateTransform(Document doc, Matrix transform)
 		{
 		}
 
-		protected virtual void OnFinishTransform()
+		protected virtual void OnFinishTransform(Document doc)
 		{
 		}
 
@@ -70,7 +70,7 @@ namespace Pinta.Tools
 		                                     Gtk.ButtonPressEventArgs args,
 		                                     Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			if(is_dragging || is_rotating)
 				return;
@@ -88,7 +88,7 @@ namespace Pinta.Tools
 				is_dragging = true;
 			}
 
-			OnStartTransform();
+			OnStartTransform (doc);
 		}
 
 		protected override void OnMouseMove (object o,
@@ -98,7 +98,8 @@ namespace Pinta.Tools
 			if (!is_dragging && !is_rotating)
 				return;
 
-			PointD center = source_rect.GetCenter();
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas ((Gtk.DrawingArea)o);
+            PointD center = source_rect.GetCenter ();
 
 			double dx = point.X - original_point.X;
 			double dy = point.Y - original_point.Y;
@@ -124,7 +125,7 @@ namespace Pinta.Tools
 				transform.Translate(dx, dy);
 			}
 
-			OnUpdateTransform (transform);
+			OnUpdateTransform (doc, transform);
 		}
 
 		protected override void OnMouseUp (Gtk.DrawingArea canvas, Gtk.ButtonReleaseEventArgs args, Cairo.PointD point)
@@ -132,7 +133,8 @@ namespace Pinta.Tools
 			is_dragging = false;
 			is_rotating = false;
 
-			OnFinishTransform();
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas); 
+            OnFinishTransform (doc);
 		}
 		#endregion
 	}

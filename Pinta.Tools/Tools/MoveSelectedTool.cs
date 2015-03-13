@@ -56,17 +56,14 @@ namespace Pinta.Tools
 
 		#region Mouse Handlers
 
-		protected override Rectangle GetSourceRectangle ()
+		protected override Rectangle GetSourceRectangle (Document doc)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
 			return doc.Selection.SelectionPath.GetBounds().ToCairoRectangle();
 		}
 
-		protected override void OnStartTransform ()
+		protected override void OnStartTransform (Document doc)
 		{
-			base.OnStartTransform ();
-
-			Document doc = PintaCore.Workspace.ActiveDocument;
+			base.OnStartTransform (doc);
 
 			// If there is no selection, select the whole image.
 			if (doc.Selection.SelectionPolygons.Count == 0) {
@@ -103,16 +100,15 @@ namespace Pinta.Tools
 				}
 			}
 			
-			PintaCore.Workspace.Invalidate ();
+			doc.Workspace.Invalidate ();
 		}
 
-		protected override void OnUpdateTransform (Matrix transform)
+        protected override void OnUpdateTransform (Document doc, Matrix transform)
 		{
-			base.OnUpdateTransform (transform);
+			base.OnUpdateTransform (doc, transform);
 
 			List<List<IntPoint>> newSelectionPolygons = DocumentSelection.Transform (original_selection, transform);
 
-			Document doc = PintaCore.Workspace.ActiveDocument;
 			doc.Selection.SelectionClipper.Clear ();
 			doc.Selection.SelectionPolygons = newSelectionPolygons;
             doc.Selection.MarkDirty ();
@@ -121,12 +117,12 @@ namespace Pinta.Tools
 			doc.SelectionLayer.Transform.InitMatrix (original_transform);
 			doc.SelectionLayer.Transform.Multiply (transform);
 
-			PintaCore.Workspace.Invalidate ();
+			doc.Workspace.Invalidate ();
 		}
 
-		protected override void OnFinishTransform ()
+		protected override void OnFinishTransform (Document doc)
 		{
-			base.OnFinishTransform ();
+			base.OnFinishTransform (doc);
 
 			if (hist != null)
 				PintaCore.History.PushNewItem (hist);

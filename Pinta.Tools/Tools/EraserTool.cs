@@ -71,7 +71,7 @@ namespace Pinta.Tools
 		#region Mouse Handlers
 		protected override void OnMouseMove (object o, Gtk.MotionNotifyEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas ((DrawingArea)o);
 
 			if (mouse_button <= 0) {
 				last_point = point_empty;

@@ -177,10 +177,8 @@ namespace Pinta.Tools
 
         }
 
-		protected override ShapeEngine CreateShape(bool ctrlKey, bool clickedOnControlPoint, PointD prevSelPoint)
+        protected override ShapeEngine CreateShape (Document doc, bool ctrlKey, bool clickedOnControlPoint, PointD prevSelPoint)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
-
 			ShapeEngine newEngine = new RoundedLineEngine(doc.CurrentUserLayer, null, Radius, owner.UseAntialiasing,
 				BaseEditEngine.OutlineColor, BaseEditEngine.FillColor, owner.EditEngine.BrushWidth);
 

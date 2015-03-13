@@ -268,6 +268,11 @@ namespace Pinta.Core
 				PintaCore.Chrome.MainWindow.Title = "Pinta";
 		}
 
+        public Document GetDocumentFromCanvas (DrawingArea canvas)
+        {
+            return OpenDocuments.FirstOrDefault (p => p.Workspace.Canvas == canvas);
+        }
+
 		public void SetActiveDocument (int index)
 		{
 			if (index >= OpenDocuments.Count)

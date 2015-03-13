@@ -62,9 +62,8 @@ namespace Pinta.Tools
 			base.OnMouseDown (canvas, args, point);
 		}
 
-		protected unsafe override void OnFillRegionComputed (IBitVector2D stencil)
+        protected unsafe override void OnFillRegionComputed (Document doc, IBitVector2D stencil)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
 			ImageSurface surf = doc.ToolLayer.Surface;
 
 			using (var g = new Context (surf)) {

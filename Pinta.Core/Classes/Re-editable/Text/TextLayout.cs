@@ -40,6 +40,9 @@ namespace Pinta.Core
         public TextEngine Engine {
             get { return engine; }
             set {
+                if (engine == value)
+                    return;
+
                 if (engine != null)
                     engine.Modified -= OnEngineModified;
                 engine = value;

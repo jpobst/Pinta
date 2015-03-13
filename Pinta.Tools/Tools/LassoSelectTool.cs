@@ -68,21 +68,22 @@ namespace Pinta.Tools
 			if (is_drawing)
 				return;
 
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
+
 			hist = new SelectionHistoryItem (Icon, Name);
 			hist.TakeSnapshot ();
 
-			combine_mode = PintaCore.Workspace.SelectionHandler.DetermineCombineMode (args);			
+            combine_mode = PintaCore.Workspace.SelectionHandler.DetermineCombineMode (args);			
 			path = null;
 			is_drawing = true;
 
-			var doc = PintaCore.Workspace.ActiveDocument;
 			doc.PreviousSelection.Dispose ();
 			doc.PreviousSelection = doc.Selection.Clone();
 		}
 
 		protected override void OnMouseMove (object o, Gtk.MotionNotifyEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas ((DrawingArea)o);
 
 			if (!is_drawing)
 				return;
@@ -121,7 +122,7 @@ namespace Pinta.Tools
 
 		protected override void OnMouseUp (Gtk.DrawingArea canvas, Gtk.ButtonReleaseEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			ImageSurface surf = doc.SelectionLayer.Surface;
 

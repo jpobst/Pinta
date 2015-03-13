@@ -114,7 +114,7 @@ namespace Pinta.Tools
 		#region Mouse Handlers
 		protected override void OnMouseUp (Gtk.DrawingArea canvas, Gtk.ButtonReleaseEventArgs args, Cairo.PointD point)
 		{
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			if (undo_surface != null) {
 				if (surface_modified)
@@ -134,7 +134,7 @@ namespace Pinta.Tools
 			if (mouse_button > 0)
 				return;
 
-			Document doc = PintaCore.Workspace.ActiveDocument;
+            var doc = PintaCore.Workspace.GetDocumentFromCanvas (canvas);
 
 			surface_modified = false;
 			undo_surface = doc.CurrentUserLayer.Surface.Clone ();
