@@ -23,7 +23,7 @@ public sealed class GaussianBlurEffect : BaseEffect
 {
 	public override string Icon => Resources.Icons.EffectsBlursGaussianBlur;
 
-	public sealed override bool IsTileable => true;
+	public sealed override bool IsTileable => false;
 
 	public override string Name => Translations.GetString ("Gaussian Blur");
 
@@ -35,18 +35,13 @@ public sealed class GaussianBlurEffect : BaseEffect
 
 	private readonly IChromeService chrome;
 	private readonly IWorkspaceService workspace;
-
-	// Thread-safe cache for the horizontal pass intermediate results.
-	// Computed once per (source, radius) pair and reused across concurrent
-	// Render calls that share the same source surface and blur radius
-	// (e.g. when AsyncEffectRenderer distributes row-tiles to worker threads).
-	private volatile HorizontalPassResult? horiz_cache;
-	private readonly object horiz_cache_lock = new ();
+	private readonly ISystemService system;
 
 	public GaussianBlurEffect (IServiceProvider services)
 	{
 		chrome = services.GetService<IChromeService> ();
 		workspace = services.GetService<IWorkspaceService> ();
+		system = services.GetService<ISystemService> ();
 		EffectData = new GaussianBlurData ();
 	}
 
@@ -79,7 +74,7 @@ public sealed class GaussianBlurEffect : BaseEffect
 	//
 	// Pass 1 (horizontal): For each pixel, convolve the source row with
 	//   the 1D kernel and store the weighted sums in an intermediate buffer.
-	// Pass 2 (vertical):   For each ROI pixel, convolve the intermediate
+	// Pass 2 (vertical):   For each pixel, convolve the intermediate
 	//   column with the 1D kernel and write the final result.
 	//
 	// Alpha handling: the source is premultiplied. We blur the premultiplied
@@ -97,29 +92,75 @@ public sealed class GaussianBlurEffect : BaseEffect
 		int wlen = weights.Length;
 		int width = src.Width;
 		int height = src.Height;
+		int threads = system.RenderThreads;
 
-		HorizontalPassResult hPass = EnsureHorizontalPass (src, r, weights, width, height);
-		Span<ColorBgra> dst_data = dest.GetPixelData ();
+		// --- Pass 1: Horizontal convolution (parallelized by row) ---
+		int size = width * height;
+		int[] h_b = new int[size];
+		int[] h_g = new int[size];
+		int[] h_r = new int[size];
+		int[] h_a = new int[size];
 
-		foreach (var rect in rois) {
-
-			if (rect.Height < 1 || rect.Width < 1)
-				continue;
-
-			for (int y = rect.Top; y <= rect.Bottom; ++y)
-				RenderVerticalRow (dst_data, y, rect.Left, rect.Right, width, height, r, weights, wlen, hPass);
+		// Precompute horizontal weight sums (depends only on x position)
+		long[] h_weight_sums = new long[width];
+		for (int x = 0; x < width; ++x) {
+			long sum = 0;
+			int wx_start = Math.Max (0, r - x);
+			int wx_end = Math.Min (wlen, width - x + r);
+			for (int wx = wx_start; wx < wx_end; ++wx)
+				sum += weights[wx];
+			h_weight_sums[x] = sum;
 		}
+
+		Parallel.For (0, height,
+			new ParallelOptions { MaxDegreeOfParallelism = threads },
+			y => {
+				ReadOnlySpan<ColorBgra> src_data = src.GetReadOnlyPixelData ();
+				int row_offset = y * width;
+
+				for (int x = 0; x < width; ++x) {
+					int s_b = 0, s_g = 0, s_r = 0, s_a = 0;
+
+					int wx_start = Math.Max (0, r - x);
+					int wx_end = Math.Min (wlen, width - x + r);
+
+					for (int wx = wx_start; wx < wx_end; ++wx) {
+						int src_x = x + wx - r;
+						ColorBgra c = src_data[row_offset + src_x];
+						int w = weights[wx];
+
+						s_b += w * c.B;
+						s_g += w * c.G;
+						s_r += w * c.R;
+						s_a += w * c.A;
+					}
+
+					int idx = row_offset + x;
+					h_b[idx] = s_b;
+					h_g[idx] = s_g;
+					h_r[idx] = s_r;
+					h_a[idx] = s_a;
+				}
+			});
+
+		// --- Pass 2: Vertical convolution (parallelized by row) ---
+
+		Parallel.For (0, height,
+			new ParallelOptions { MaxDegreeOfParallelism = threads },
+			y => {
+				Span<ColorBgra> dst_data = dest.GetPixelData ();
+				RenderVerticalRow (dst_data, y, width, height, r, weights, wlen, h_b, h_g, h_r, h_a, h_weight_sums);
+			});
 	}
 
 	private static void RenderVerticalRow (
 		Span<ColorBgra> dst_data,
-		int y, int left, int right,
+		int y,
 		int width, int height, int r,
 		ImmutableArray<int> weights, int wlen,
-		HorizontalPassResult hPass)
+		int[] h_b, int[] h_g, int[] h_r, int[] h_a,
+		long[] h_weight_sums)
 	{
-		int roi_width = right - left + 1;
-
 		// Determine valid vertical kernel range for this row
 		int wy_start = Math.Max (0, r - y);
 		int wy_end = Math.Min (wlen, height - y + r);
@@ -128,17 +169,17 @@ public sealed class GaussianBlurEffect : BaseEffect
 		for (int wy = wy_start; wy < wy_end; ++wy)
 			v_weight_sum += weights[wy];
 
-		// Rent row-length accumulators from the pool to avoid per-row allocation
-		long[] rent_b = ArrayPool<long>.Shared.Rent (roi_width);
-		long[] rent_g = ArrayPool<long>.Shared.Rent (roi_width);
-		long[] rent_r = ArrayPool<long>.Shared.Rent (roi_width);
-		long[] rent_a = ArrayPool<long>.Shared.Rent (roi_width);
+		// Rent accumulators from the pool to avoid per-row heap allocation
+		long[] rent_b = ArrayPool<long>.Shared.Rent (width);
+		long[] rent_g = ArrayPool<long>.Shared.Rent (width);
+		long[] rent_r = ArrayPool<long>.Shared.Rent (width);
+		long[] rent_a = ArrayPool<long>.Shared.Rent (width);
 
 		try {
-			Span<long> sum_b = rent_b.AsSpan (0, roi_width);
-			Span<long> sum_g = rent_g.AsSpan (0, roi_width);
-			Span<long> sum_r = rent_r.AsSpan (0, roi_width);
-			Span<long> sum_a = rent_a.AsSpan (0, roi_width);
+			Span<long> sum_b = rent_b.AsSpan (0, width);
+			Span<long> sum_g = rent_g.AsSpan (0, width);
+			Span<long> sum_r = rent_r.AsSpan (0, width);
+			Span<long> sum_a = rent_a.AsSpan (0, width);
 
 			sum_b.Clear ();
 			sum_g.Clear ();
@@ -149,28 +190,27 @@ public sealed class GaussianBlurEffect : BaseEffect
 			for (int wy = wy_start; wy < wy_end; ++wy) {
 				int src_y = y + wy - r;
 				int w = weights[wy];
-				int row_offset = src_y * width + left;
+				int row_offset = src_y * width;
 
-				AccumulateRow (sum_b, hPass.B, row_offset, roi_width, w);
-				AccumulateRow (sum_g, hPass.G, row_offset, roi_width, w);
-				AccumulateRow (sum_r, hPass.R, row_offset, roi_width, w);
-				AccumulateRow (sum_a, hPass.A, row_offset, roi_width, w);
+				AccumulateRow (sum_b, h_b, row_offset, width, w);
+				AccumulateRow (sum_g, h_g, row_offset, width, w);
+				AccumulateRow (sum_r, h_r, row_offset, width, w);
+				AccumulateRow (sum_a, h_a, row_offset, width, w);
 			}
 
 			// Write output pixels
 			var dst_row = dst_data.Slice (y * width, width);
 
-			for (int i = 0; i < roi_width; ++i) {
-				int x = left + i;
-				long total_weight = hPass.WeightSums[x] * v_weight_sum;
+			for (int x = 0; x < width; ++x) {
+				long total_weight = h_weight_sums[x] * v_weight_sum;
 
-				if (total_weight == 0 || sum_a[i] == 0) {
+				if (total_weight == 0 || sum_a[x] == 0) {
 					dst_row[x] = ColorBgra.Zero;
 				} else {
-					byte alpha = (byte) (sum_a[i] / total_weight);
-					byte blue = (byte) (sum_b[i] * 255 / sum_a[i]);
-					byte green = (byte) (sum_g[i] * 255 / sum_a[i]);
-					byte red = (byte) (sum_r[i] * 255 / sum_a[i]);
+					byte alpha = (byte) (sum_a[x] / total_weight);
+					byte blue = (byte) (sum_b[x] * 255 / sum_a[x]);
+					byte green = (byte) (sum_g[x] * 255 / sum_a[x]);
+					byte red = (byte) (sum_r[x] * 255 / sum_a[x]);
 					dst_row[x] = ColorBgra.FromBgra (blue, green, red, alpha).ToPremultipliedAlpha ();
 				}
 			}
@@ -214,115 +254,6 @@ public sealed class GaussianBlurEffect : BaseEffect
 		// Scalar tail
 		for (; i < length; ++i)
 			Unsafe.Add (ref acc_ref, i) += (long) weight * Unsafe.Add (ref src_ref, i);
-	}
-
-	#endregion
-
-	#region Horizontal Pass
-
-	private HorizontalPassResult EnsureHorizontalPass (
-		ImageSurface src, int radius,
-		ImmutableArray<int> weights, int width, int height)
-	{
-		HorizontalPassResult? cached = horiz_cache;
-		if (cached != null && cached.IsValidFor (src, radius))
-			return cached;
-
-		lock (horiz_cache_lock) {
-			cached = horiz_cache;
-			if (cached != null && cached.IsValidFor (src, radius))
-				return cached;
-
-			var result = ComputeHorizontalPass (src, radius, weights, width, height);
-			horiz_cache = result;
-			return result;
-		}
-	}
-
-	private static HorizontalPassResult ComputeHorizontalPass (
-		ImageSurface src, int radius,
-		ImmutableArray<int> weights, int width, int height)
-	{
-		int size = width * height;
-		int wlen = weights.Length;
-
-		int[] h_b = new int[size];
-		int[] h_g = new int[size];
-		int[] h_r = new int[size];
-		int[] h_a = new int[size];
-
-		ReadOnlySpan<ColorBgra> src_data = src.GetReadOnlyPixelData ();
-
-		for (int y = 0; y < height; ++y) {
-			int row_offset = y * width;
-
-			for (int x = 0; x < width; ++x) {
-				int s_b = 0, s_g = 0, s_r = 0, s_a = 0;
-
-				int wx_start = Math.Max (0, radius - x);
-				int wx_end = Math.Min (wlen, width - x + radius);
-
-				for (int wx = wx_start; wx < wx_end; ++wx) {
-					int src_x = x + wx - radius;
-					ColorBgra c = src_data[row_offset + src_x];
-					int w = weights[wx];
-
-					s_b += w * c.B;
-					s_g += w * c.G;
-					s_r += w * c.R;
-					s_a += w * c.A;
-				}
-
-				int idx = row_offset + x;
-				h_b[idx] = s_b;
-				h_g[idx] = s_g;
-				h_r[idx] = s_r;
-				h_a[idx] = s_a;
-			}
-		}
-
-		// Precompute horizontal weight sums (depends only on x position)
-		long[] weight_sums = new long[width];
-		for (int x = 0; x < width; ++x) {
-			long sum = 0;
-			int wx_start = Math.Max (0, radius - x);
-			int wx_end = Math.Min (wlen, width - x + radius);
-			for (int wx = wx_start; wx < wx_end; ++wx)
-				sum += weights[wx];
-			weight_sums[x] = sum;
-		}
-
-		return new HorizontalPassResult (h_b, h_g, h_r, h_a, weight_sums, src, radius);
-	}
-
-	private sealed class HorizontalPassResult
-	{
-		public readonly int[] B;
-		public readonly int[] G;
-		public readonly int[] R;
-		public readonly int[] A;
-		public readonly long[] WeightSums;
-
-		private readonly WeakReference<ImageSurface> source_ref;
-		private readonly int radius;
-
-		public HorizontalPassResult (
-			int[] b, int[] g, int[] r, int[] a,
-			long[] weightSums, ImageSurface src, int radius)
-		{
-			B = b;
-			G = g;
-			R = r;
-			A = a;
-			WeightSums = weightSums;
-			source_ref = new WeakReference<ImageSurface> (src);
-			this.radius = radius;
-		}
-
-		public bool IsValidFor (ImageSurface src, int radius)
-			=> this.radius == radius
-			&& source_ref.TryGetTarget (out var cached)
-			&& ReferenceEquals (cached, src);
 	}
 
 	#endregion
