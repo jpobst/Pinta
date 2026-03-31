@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Immutable;
+using System.Runtime.Intrinsics;
 using System.Threading.Tasks;
 using Cairo;
 using Pinta.Core;
@@ -67,12 +68,10 @@ public sealed class GaussianBlurEffect : BaseEffect
 		ImmutableArray<int> w = CreateGaussianBlurRow (r);
 		int wlen = w.Length;
 
+		// Use Vector256<long> to process all 4 color channels (B, G, R, A) in parallel
 		Span<long> waSums = stackalloc long[wlen];
 		Span<long> wcSums = stackalloc long[wlen];
-		Span<long> aSums = stackalloc long[wlen];
-		Span<long> bSums = stackalloc long[wlen];
-		Span<long> gSums = stackalloc long[wlen];
-		Span<long> rSums = stackalloc long[wlen];
+		Span<Vector256<long>> channelSums = stackalloc Vector256<long>[wlen];
 
 		// Cache these for a massive performance boost
 		int src_width = src.Width;
@@ -88,10 +87,7 @@ public sealed class GaussianBlurEffect : BaseEffect
 			for (int y = rect.Top; y <= rect.Bottom; ++y) {
 				long waSum = 0;
 				long wcSum = 0;
-				long aSum = 0;
-				long bSum = 0;
-				long gSum = 0;
-				long rSum = 0;
+				Vector256<long> channelSum = Vector256<long>.Zero;
 
 				var dst_row = dst_data.Slice (y * src_width, src_width);
 
@@ -99,10 +95,7 @@ public sealed class GaussianBlurEffect : BaseEffect
 					int srcX = rect.Left + wx - r;
 					waSums[wx] = 0;
 					wcSums[wx] = 0;
-					aSums[wx] = 0;
-					bSums[wx] = 0;
-					gSums[wx] = 0;
-					rSums[wx] = 0;
+					channelSums[wx] = Vector256<long>.Zero;
 
 					if (srcX < 0 || srcX >= src_width)
 						continue;
@@ -123,72 +116,44 @@ public sealed class GaussianBlurEffect : BaseEffect
 						wcSums[wx] += wp;
 						wp >>= 8;
 
-						if (c.A > 0) {
-							aSums[wx] += wp * c.A;
-							bSums[wx] += wp * c.B;
-							gSums[wx] += wp * c.G;
-							rSums[wx] += wp * c.R;
-						}
+						Vector256<long> pixel = Vector256.Create ((long) c.B, (long) c.G, (long) c.R, (long) c.A);
+						channelSums[wx] += Vector256.Create ((long) wp) * pixel;
 					}
 
-					int wwx = w[wx];
+					long wwx = w[wx];
 					waSum += wwx * waSums[wx];
 					wcSum += wwx * wcSums[wx];
-					aSum += wwx * aSums[wx];
-					bSum += wwx * bSums[wx];
-					gSum += wwx * gSums[wx];
-					rSum += wwx * rSums[wx];
+					channelSum += Vector256.Create (wwx) * channelSums[wx];
 				}
 
 				wcSum >>= 8;
 
-				if (waSum == 0 || wcSum == 0) {
-					dst_row[rect.Left] = ColorBgra.Zero;
-				} else {
-					byte alpha = (byte) (aSum / waSum);
-					byte blue = (byte) (bSum / wcSum);
-					byte green = (byte) (gSum / wcSum);
-					byte red = (byte) (rSum / wcSum);
-
-					dst_row[rect.Left] = ColorBgra.FromBgra (blue, green, red, alpha).ToPremultipliedAlpha ();
-				}
+				dst_row[rect.Left] = ComputeBlurredPixel (channelSum, waSum, wcSum);
 
 				for (int x = rect.Left + 1; x <= rect.Right; ++x) {
 					for (int i = 0; i < wlen - 1; ++i) {
 						waSums[i] = waSums[i + 1];
 						wcSums[i] = wcSums[i + 1];
-						aSums[i] = aSums[i + 1];
-						bSums[i] = bSums[i + 1];
-						gSums[i] = gSums[i + 1];
-						rSums[i] = rSums[i + 1];
+						channelSums[i] = channelSums[i + 1];
 					}
 
 					waSum = 0;
 					wcSum = 0;
-					aSum = 0;
-					bSum = 0;
-					gSum = 0;
-					rSum = 0;
+					channelSum = Vector256<long>.Zero;
 
 					int wx;
 					for (wx = 0; wx < wlen - 1; ++wx) {
 						long wwx = w[wx];
 						waSum += wwx * waSums[wx];
 						wcSum += wwx * wcSums[wx];
-						aSum += wwx * aSums[wx];
-						bSum += wwx * bSums[wx];
-						gSum += wwx * gSums[wx];
-						rSum += wwx * rSums[wx];
+						channelSum += Vector256.Create (wwx) * channelSums[wx];
 					}
 
 					wx = wlen - 1;
 
 					waSums[wx] = 0;
 					wcSums[wx] = 0;
-					aSums[wx] = 0;
-					bSums[wx] = 0;
-					gSums[wx] = 0;
-					rSums[wx] = 0;
+					channelSums[wx] = Vector256<long>.Zero;
 
 					int srcX = x + wx - r;
 
@@ -207,38 +172,39 @@ public sealed class GaussianBlurEffect : BaseEffect
 							wcSums[wx] += wp;
 							wp >>= 8;
 
-							if (c.A > 0) {
-								aSums[wx] += wp * (long) c.A;
-								bSums[wx] += wp * (long) c.B;
-								gSums[wx] += wp * (long) c.G;
-								rSums[wx] += wp * (long) c.R;
-							}
+							Vector256<long> pixel = Vector256.Create ((long) c.B, (long) c.G, (long) c.R, (long) c.A);
+							channelSums[wx] += Vector256.Create ((long) wp) * pixel;
 						}
 
-						int wr = w[wx];
+						long wr = w[wx];
 						waSum += wr * waSums[wx];
 						wcSum += wr * wcSums[wx];
-						aSum += wr * aSums[wx];
-						bSum += wr * bSums[wx];
-						gSum += wr * gSums[wx];
-						rSum += wr * rSums[wx];
+						channelSum += Vector256.Create (wr) * channelSums[wx];
 					}
 
 					wcSum >>= 8;
 
-					if (waSum == 0 || wcSum == 0) {
-						dst_row[x] = ColorBgra.Zero;
-					} else {
-						byte alpha = (byte) (aSum / waSum);
-						byte blue = (byte) (bSum / wcSum);
-						byte green = (byte) (gSum / wcSum);
-						byte red = (byte) (rSum / wcSum);
-
-						dst_row[x] = ColorBgra.FromBgra (blue, green, red, alpha).ToPremultipliedAlpha ();
-					}
+					dst_row[x] = ComputeBlurredPixel (channelSum, waSum, wcSum);
 				}
 			}
 		}
+	}
+
+	/// <summary>
+	/// Converts the accumulated SIMD channel sums into a final blurred pixel color.
+	/// The channelSum vector holds {B, G, R, A} accumulated weighted sums.
+	/// </summary>
+	private static ColorBgra ComputeBlurredPixel (Vector256<long> channelSum, long waSum, long wcSum)
+	{
+		if (waSum == 0 || wcSum == 0)
+			return ColorBgra.Zero;
+
+		byte blue = (byte) (channelSum.GetElement (0) / wcSum);
+		byte green = (byte) (channelSum.GetElement (1) / wcSum);
+		byte red = (byte) (channelSum.GetElement (2) / wcSum);
+		byte alpha = (byte) (channelSum.GetElement (3) / waSum);
+
+		return ColorBgra.FromBgra (blue, green, red, alpha).ToPremultipliedAlpha ();
 	}
 	#endregion
 
