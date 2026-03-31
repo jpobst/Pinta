@@ -1,4 +1,6 @@
+using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
 
 namespace Pinta.Core;
 
@@ -27,10 +29,117 @@ internal static class BlendOpHelper
 	// "theoretical" counterparts, and then scaling everything back (see the `ROUNDING_ADDEND`
 	// constant, which is a neat trick for using the truncation operator for rounding).
 
+	/// <summary>
+	/// Scalar channel blend interface. Implementations provide the blend-mode-specific
+	/// per-channel computation.
+	/// </summary>
 	public interface IChannelBlend
 	{
 		[MethodImpl (MethodImplOptions.AggressiveInlining)]
 		static abstract int BlendChannel (int Cb, int Ca, int Ab, int Aa);
+	}
+
+	/// <summary>
+	/// Extends <see cref="IChannelBlend"/> with a SIMD version of the channel blend
+	/// operating on <see cref="Vector128{T}"/> of <see cref="ushort"/>.
+	/// Each vector holds 8 channel values (2 pixels × 4 channels in BGRA order).
+	/// Ab and Aa are broadcast to all channels within each pixel.
+	/// The result of BlendChannel must fit in ushort (max 65535).
+	/// </summary>
+	public interface IVectorChannelBlend : IChannelBlend
+	{
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		static abstract Vector128<ushort> BlendChannel (
+			Vector128<ushort> Cb, Vector128<ushort> Ca,
+			Vector128<ushort> Ab, Vector128<ushort> Aa);
+	}
+
+	/// <summary>
+	/// Pixel-level SIMD blend interface. Implementations provide the complete blend
+	/// operation for packed pixel vectors (4 pixels per Vector128, 8 per Vector256).
+	/// </summary>
+	public interface IPixelBlend
+	{
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		static abstract ColorBgra Apply (in ColorBgra lhs, in ColorBgra rhs);
+
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		static abstract Vector128<byte> Apply (Vector128<byte> lhs, Vector128<byte> rhs);
+
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		static abstract Vector256<byte> Apply (Vector256<byte> lhs, Vector256<byte> rhs);
+	}
+
+	/// <summary>
+	/// Adapter struct that wraps an <see cref="IVectorChannelBlend"/> into an <see cref="IPixelBlend"/>,
+	/// using the general premultiplied alpha compositing formula for both scalar and SIMD paths.
+	/// Includes early exits for fully transparent top/bottom pixels (matching the scalar blend ops).
+	/// </summary>
+	public readonly struct PremultipliedBlend<TChannel> : IPixelBlend
+		where TChannel : struct, IVectorChannelBlend
+	{
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		public static ColorBgra Apply (in ColorBgra lhs, in ColorBgra rhs)
+		{
+			if (rhs.A == 0) return lhs;
+			if (lhs.A == 0) return rhs;
+			return ComputePremultiplied<TChannel> (lhs, rhs);
+		}
+
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		public static Vector128<byte> Apply (Vector128<byte> lhs, Vector128<byte> rhs)
+			=> ComputePremultiplied128<TChannel> (lhs, rhs);
+
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		public static Vector256<byte> Apply (Vector256<byte> lhs, Vector256<byte> rhs)
+			=> ComputePremultiplied256<TChannel> (lhs, rhs);
+	}
+
+	/// <summary>
+	/// Adapter struct that wraps an <see cref="IChannelBlend"/> (scalar-only) into an <see cref="IPixelBlend"/>.
+	/// The SIMD paths process pixels individually (no vectorized channel blend), but the loop
+	/// infrastructure in <see cref="BinaryPixelOp.ApplyLoop{TBlend}"/> is still used uniformly.
+	/// Use <see cref="PremultipliedBlend{TChannel}"/> instead when an <see cref="IVectorChannelBlend"/>
+	/// implementation is available for better performance.
+	/// </summary>
+	public readonly struct ScalarPremultipliedBlend<TChannel> : IPixelBlend
+		where TChannel : struct, IChannelBlend
+	{
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		public static ColorBgra Apply (in ColorBgra lhs, in ColorBgra rhs)
+		{
+			if (rhs.A == 0) return lhs;
+			if (lhs.A == 0) return rhs;
+			return ComputePremultiplied<TChannel> (lhs, rhs);
+		}
+
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		public static Vector128<byte> Apply (Vector128<byte> lhs, Vector128<byte> rhs)
+		{
+			// Process 4 pixels individually via the scalar path.
+			Vector128<uint> lhsU = lhs.AsUInt32 ();
+			Vector128<uint> rhsU = rhs.AsUInt32 ();
+			return Vector128.Create (
+				Unsafe.BitCast<ColorBgra, uint> (Apply (
+					Unsafe.BitCast<uint, ColorBgra> (lhsU[0]),
+					Unsafe.BitCast<uint, ColorBgra> (rhsU[0]))),
+				Unsafe.BitCast<ColorBgra, uint> (Apply (
+					Unsafe.BitCast<uint, ColorBgra> (lhsU[1]),
+					Unsafe.BitCast<uint, ColorBgra> (rhsU[1]))),
+				Unsafe.BitCast<ColorBgra, uint> (Apply (
+					Unsafe.BitCast<uint, ColorBgra> (lhsU[2]),
+					Unsafe.BitCast<uint, ColorBgra> (rhsU[2]))),
+				Unsafe.BitCast<ColorBgra, uint> (Apply (
+					Unsafe.BitCast<uint, ColorBgra> (lhsU[3]),
+					Unsafe.BitCast<uint, ColorBgra> (rhsU[3])))
+			).AsByte ();
+		}
+
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		public static Vector256<byte> Apply (Vector256<byte> lhs, Vector256<byte> rhs)
+			=> Vector256.Create (
+				Apply (lhs.GetLower (), rhs.GetLower ()),
+				Apply (lhs.GetUpper (), rhs.GetUpper ()));
 	}
 
 	[MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -65,5 +174,143 @@ internal static class BlendOpHelper
 		byte outA = Utility.ClampToByte (top.A + (bottom.A * inverseTopAlpha + ROUNDING_ADDEND) / 255);
 
 		return ColorBgra.FromBgra (outB, outG, outR, outA);
+	}
+
+	/// <summary>
+	/// SIMD implementation of the premultiplied alpha compositing formula for 4 pixels
+	/// packed in a <see cref="Vector128{T}"/> of bytes.
+	/// Products are computed in ushort (each fits in 16 bits), then widened to uint for
+	/// the sum to avoid overflow. DivBy255 uses the decomposition:
+	/// <c>x / 255 = (x >> 8) + DivBy255_small((x >> 8) + (x &amp; 0xFF))</c>
+	/// which is exact for x in [0, 195203].
+	/// Alpha is computed separately using the standard formula.
+	/// </summary>
+	[MethodImpl (MethodImplOptions.AggressiveInlining)]
+	public static Vector128<byte> ComputePremultiplied128<TChannelBlend> (Vector128<byte> bottom, Vector128<byte> top)
+		where TChannelBlend : IVectorChannelBlend
+	{
+		// Shuffle mask: broadcast alpha byte to all 4 channels of each pixel
+		Vector128<byte> alphaMask = Vector128.Create (
+			(byte) 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15);
+		Vector128<byte> v255b = Vector128.Create ((byte) 255);
+		Vector128<ushort> v255u = Vector128.Create ((ushort) 255);
+		Vector128<ushort> v128u = Vector128.Create ((ushort) 128);
+		Vector128<ushort> vOne = Vector128.Create ((ushort) 1);
+		// Mask to select alpha channel positions (index 3 and 7 in each ushort half)
+		Vector128<ushort> alphaSelect = Vector128.Create (
+			(ushort) 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF);
+
+		// Broadcast alpha from each pixel to all its channels
+		Vector128<byte> topAlpha = Vector128.Shuffle (top, alphaMask);
+		Vector128<byte> botAlpha = Vector128.Shuffle (bottom, alphaMask);
+		Vector128<byte> invTopAlpha = v255b - topAlpha;
+		Vector128<byte> invBotAlpha = v255b - botAlpha;
+
+		// Widen to ushort (each half covers 2 pixels)
+		(Vector128<ushort> botLo, Vector128<ushort> botHi) = Vector128.Widen (bottom);
+		(Vector128<ushort> topLo, Vector128<ushort> topHi) = Vector128.Widen (top);
+		(Vector128<ushort> invTopAlphaLo, Vector128<ushort> invTopAlphaHi) = Vector128.Widen (invTopAlpha);
+		(Vector128<ushort> invBotAlphaLo, Vector128<ushort> invBotAlphaHi) = Vector128.Widen (invBotAlpha);
+		(Vector128<ushort> topAlphaLo, Vector128<ushort> topAlphaHi) = Vector128.Widen (topAlpha);
+		(Vector128<ushort> botAlphaLo, Vector128<ushort> botAlphaHi) = Vector128.Widen (botAlpha);
+
+		// --- Process lo half (pixels 0-1) and hi half (pixels 2-3) ---
+		Vector128<ushort> resultLo = ComputeHalf<TChannelBlend> (
+			botLo, topLo, invTopAlphaLo, invBotAlphaLo, topAlphaLo, botAlphaLo,
+			v255u, v128u, vOne, alphaSelect);
+		Vector128<ushort> resultHi = ComputeHalf<TChannelBlend> (
+			botHi, topHi, invTopAlphaHi, invBotAlphaHi, topAlphaHi, botAlphaHi,
+			v255u, v128u, vOne, alphaSelect);
+
+		// Narrow ushort → byte
+		Vector128<byte> result = Vector128.Narrow (resultLo, resultHi);
+
+		// Where topAlpha == 0, use bottom unchanged (handles non-premultiplied edge cases)
+		Vector128<byte> isTopTransparent = Vector128.Equals (topAlpha, Vector128<byte>.Zero);
+		result = Vector128.ConditionalSelect (isTopTransparent, bottom, result);
+
+		// Where botAlpha == 0, use top unchanged
+		Vector128<byte> isBotTransparent = Vector128.Equals (botAlpha, Vector128<byte>.Zero);
+		result = Vector128.ConditionalSelect (isBotTransparent, top, result);
+
+		return result;
+	}
+
+	/// <summary>
+	/// Processes one half (2 pixels, 8 ushort channels) of the premultiplied alpha formula.
+	/// </summary>
+	[MethodImpl (MethodImplOptions.AggressiveInlining)]
+	private static Vector128<ushort> ComputeHalf<TChannelBlend> (
+		Vector128<ushort> bot, Vector128<ushort> top,
+		Vector128<ushort> invTopAlpha, Vector128<ushort> invBotAlpha,
+		Vector128<ushort> topAlpha, Vector128<ushort> botAlpha,
+		Vector128<ushort> v255u, Vector128<ushort> v128u, Vector128<ushort> vOne,
+		Vector128<ushort> alphaSelect)
+		where TChannelBlend : IVectorChannelBlend
+	{
+		// Products in ushort (each max 255*255 = 65025, fits in ushort)
+		Vector128<ushort> topContrib = invBotAlpha * top;
+		Vector128<ushort> botContrib = invTopAlpha * bot;
+		Vector128<ushort> blend = TChannelBlend.BlendChannel (bot, top, botAlpha, topAlpha);
+
+		// Widen to uint for safe addition (sum can exceed ushort max of 65535)
+		(Vector128<uint> tc0, Vector128<uint> tc1) = Vector128.Widen (topContrib);
+		(Vector128<uint> bc0, Vector128<uint> bc1) = Vector128.Widen (botContrib);
+		(Vector128<uint> bl0, Vector128<uint> bl1) = Vector128.Widen (blend);
+
+		Vector128<uint> v128_u32 = Vector128.Create ((uint) 128);
+		Vector128<uint> vOne_u32 = Vector128.Create ((uint) 1);
+		Vector128<uint> v0xFF_u32 = Vector128.Create ((uint) 0xFF);
+
+		// Sum in uint + rounding addend
+		Vector128<uint> sum0 = tc0 + bc0 + bl0 + v128_u32;
+		Vector128<uint> sum1 = tc1 + bc1 + bl1 + v128_u32;
+
+		// DivBy255 using decomposition: x/255 = (x>>8) + DivBy255_small((x>>8) + (x & 0xFF))
+		// where DivBy255_small(y) = (y + (y>>8) + 1) >> 8, exact for y ≤ 65534
+		// The decomposition is exact for x ≤ 195203 (covers our max of ~195203)
+		Vector128<uint> colorRes0 = DivBy255Wide (sum0, v0xFF_u32, vOne_u32);
+		Vector128<uint> colorRes1 = DivBy255Wide (sum1, v0xFF_u32, vOne_u32);
+
+		// Narrow uint → ushort
+		Vector128<ushort> colorResult = Vector128.Narrow (colorRes0, colorRes1);
+		colorResult = Vector128.Min (colorResult, v255u);
+
+		// Compute correct alpha: Aa + DivBy255((255-Aa) * Ab + 128)
+		Vector128<ushort> alphaProduct = invTopAlpha * botAlpha + v128u;
+		Vector128<ushort> alphaDiv = (alphaProduct + (alphaProduct >>> 8) + vOne) >>> 8;
+		Vector128<ushort> correctAlpha = Vector128.Min (topAlpha + alphaDiv, v255u);
+
+		// Replace alpha channels in result with correct alpha
+		return Vector128.ConditionalSelect (alphaSelect, correctAlpha, colorResult);
+	}
+
+	/// <summary>
+	/// Exact integer division by 255 for uint values up to 195203.
+	/// Uses the decomposition: x/255 = (x >> 8) + ((x >> 8) + (x &amp; 0xFF) + (((x >> 8) + (x &amp; 0xFF)) >> 8) + 1) >> 8
+	/// </summary>
+	[MethodImpl (MethodImplOptions.AggressiveInlining)]
+	private static Vector128<uint> DivBy255Wide (
+		Vector128<uint> x,
+		Vector128<uint> v0xFF, Vector128<uint> vOne)
+	{
+		Vector128<uint> hi = x >>> 8;
+		Vector128<uint> lo = x & v0xFF;
+		Vector128<uint> inner = hi + lo;
+		Vector128<uint> divInner = (inner + (inner >>> 8) + vOne) >>> 8;
+		return hi + divInner;
+	}
+
+	/// <summary>
+	/// SIMD implementation for 8 pixels packed in a <see cref="Vector256{T}"/>.
+	/// Splits into two <see cref="Vector128{T}"/> halves and processes each independently.
+	/// </summary>
+	[MethodImpl (MethodImplOptions.AggressiveInlining)]
+	public static Vector256<byte> ComputePremultiplied256<TChannelBlend> (Vector256<byte> bottom, Vector256<byte> top)
+		where TChannelBlend : IVectorChannelBlend
+	{
+		return Vector256.Create (
+			ComputePremultiplied128<TChannelBlend> (bottom.GetLower (), top.GetLower ()),
+			ComputePremultiplied128<TChannelBlend> (bottom.GetUpper (), top.GetUpper ()));
 	}
 }

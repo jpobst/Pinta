@@ -1,13 +1,6 @@
-/////////////////////////////////////////////////////////////////////////////////
-// Paint.NET                                                                   //
-// Copyright (C) dotPDN LLC, Rick Brewster, Tom Jackson, and contributors.     //
-// Portions Copyright (C) Microsoft Corporation. All Rights Reserved.          //
-// See license-pdn.txt for full licensing and attribution details.             //
-//                                                                             //
-// Ported to Pinta by: Jonathan Pobst <monkey@jpobst.com>                      //
-/////////////////////////////////////////////////////////////////////////////////
-
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
 
 namespace Pinta.Core;
 
@@ -16,46 +9,71 @@ partial class UserBlendOps
 	[Serializable]
 	public sealed class XorBlendOp : UserBlendOp
 	{
-		public static string StaticName => "Xor";
+		public static string StaticName
+			=> "Xor";
 
 		public override ColorBgra Apply (in ColorBgra lhs, in ColorBgra rhs)
 			=> ApplyStatic (lhs, rhs);
 
-		public static ColorBgra ApplyStatic (in ColorBgra lhs, in ColorBgra rhs)
+		public static ColorBgra ApplyStatic (in ColorBgra bottom, in ColorBgra top)
 		{
-			int y;
+			// The Xor blend mode XORs the channel values of the two layers.
+			// This is a bitwise operation that produces somewhat unpredictable visual results.
+
+			if (top.A == 0) return bottom;
+			if (bottom.A == 0) return top;
+
+			return BlendOpHelper.ComputePremultiplied<ChannelBlend> (bottom, top);
+		}
+
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
+			=> ApplyLoop<BlendOpHelper.PremultipliedBlend<ChannelBlend>> (dst, lhs, rhs);
+
+		private readonly struct ChannelBlend : BlendOpHelper.IVectorChannelBlend
+		{
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static int BlendChannel (int Cb, int Ca, int Ab, int Aa)
+				// XOR operates on the raw premultiplied channel bytes.
+				// In the premultiplied blend formula, the blend contribution
+				// is weighted by Aa*Ab (the overlap region).
+				=> (Cb ^ Ca) * Ab * Aa / 255;
+
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static Vector128<ushort> BlendChannel (
+				Vector128<ushort> Cb, Vector128<ushort> Ca,
+				Vector128<ushort> Ab, Vector128<ushort> Aa)
 			{
-				y = lhs.A * (255 - rhs.A) + 0x80;
-				y = ((y >> 8) + y) >> 8;
+				// (Cb ^ Ca) * Ab * Aa / 255
+				// Cb ^ Ca fits in byte [0,255], then * Ab * Aa max = 255*65025 overflows ushort.
+				// We use the fact that (Cb ^ Ca) ≤ 255, Ab ≤ 255, Aa ≤ 255:
+				// (Cb ^ Ca) * Ab ≤ 65025 fits in ushort, then * Aa / 255 via DivBy255.
+				Vector128<ushort> xorVal = Cb ^ Ca;
+				Vector128<ushort> product = xorVal * Ab; // max 65025, fits ushort
+									 // DivBy255 of (product * Aa): product * Aa / 255
+									 // product * Aa max = 65025 * 255 = 16581375, needs uint
+				(Vector128<uint> prodLo, Vector128<uint> prodHi) = Vector128.Widen (product);
+				(Vector128<uint> aaLo, Vector128<uint> aaHi) = Vector128.Widen (Aa);
+				Vector128<uint> mulLo = prodLo * aaLo;
+				Vector128<uint> mulHi = prodHi * aaHi;
+				// DivBy255Wide is exact for values up to ~16.7M (covers our max of 16581375)
+				Vector128<uint> vOne = Vector128.Create ((uint) 1);
+				Vector128<uint> v0xFF = Vector128.Create ((uint) 0xFF);
+				Vector128<uint> resLo = DivBy255Wide (mulLo, v0xFF, vOne);
+				Vector128<uint> resHi = DivBy255Wide (mulHi, v0xFF, vOne);
+				return Vector128.Min (Vector128.Narrow (resLo, resHi), Vector128.Create ((ushort) 65025));
 			}
 
-			int totalA = y + rhs.A;
-
-			if (totalA == 0) return ColorBgra.FromUInt32 (0);
-
-			int fB = lhs.B ^ rhs.B;
-			int fG = lhs.G ^ rhs.G;
-			int fR = lhs.R ^ rhs.R;
-			int x;
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			private static Vector128<uint> DivBy255Wide (
+				Vector128<uint> x,
+				Vector128<uint> v0xFF, Vector128<uint> vOne)
 			{
-				x = lhs.A * rhs.A + 0x80;
-				x = ((x >> 8) + x) >> 8;
+				Vector128<uint> hi = x >>> 8;
+				Vector128<uint> lo = x & v0xFF;
+				Vector128<uint> inner = hi + lo;
+				Vector128<uint> divInner = (inner + (inner >>> 8) + vOne) >>> 8;
+				return hi + divInner;
 			}
-			int z = rhs.A - x;
-			int masIndex = totalA * 3;
-			uint taM = mas_table[masIndex];
-			uint taA = mas_table[masIndex + 1];
-			uint taS = mas_table[masIndex + 2];
-			uint b = (uint) (((((lhs.B * y) + (rhs.B * z) + (fB * x)) * taM) + taA) >> (int) taS);
-			uint g = (uint) (((((lhs.G * y) + (rhs.G * z) + (fG * x)) * taM) + taA) >> (int) taS);
-			uint r = (uint) (((((lhs.R * y) + (rhs.R * z) + (fR * x)) * taM) + taA) >> (int) taS);
-			int a;
-			{
-				a = lhs.A * (255 - rhs.A) + 0x80;
-				a = ((a >> 8) + a) >> 8;
-				a += rhs.A;
-			}
-			return ColorBgra.FromUInt32 (b + (g << 8) + (r << 16) + ((uint) a << 24));
 		}
 	}
 }
