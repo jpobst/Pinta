@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 
 namespace Pinta.Core;
@@ -117,13 +116,23 @@ internal static class BlendOpHelper
 		[MethodImpl (MethodImplOptions.AggressiveInlining)]
 		public static Vector128<byte> Apply (Vector128<byte> lhs, Vector128<byte> rhs)
 		{
-			Span<ColorBgra> lhsPixels = stackalloc ColorBgra[4];
-			Span<ColorBgra> rhsPixels = stackalloc ColorBgra[4];
-			lhs.CopyTo (MemoryMarshal.AsBytes (lhsPixels));
-			rhs.CopyTo (MemoryMarshal.AsBytes (rhsPixels));
-			for (int i = 0; i < 4; i++)
-				lhsPixels[i] = Apply (lhsPixels[i], rhsPixels[i]);
-			return Vector128.Create<byte> (MemoryMarshal.AsBytes ((ReadOnlySpan<ColorBgra>) lhsPixels));
+			// Process 4 pixels individually via the scalar path.
+			Vector128<uint> lhsU = lhs.AsUInt32 ();
+			Vector128<uint> rhsU = rhs.AsUInt32 ();
+			return Vector128.Create (
+				Unsafe.BitCast<ColorBgra, uint> (Apply (
+					Unsafe.BitCast<uint, ColorBgra> (lhsU[0]),
+					Unsafe.BitCast<uint, ColorBgra> (rhsU[0]))),
+				Unsafe.BitCast<ColorBgra, uint> (Apply (
+					Unsafe.BitCast<uint, ColorBgra> (lhsU[1]),
+					Unsafe.BitCast<uint, ColorBgra> (rhsU[1]))),
+				Unsafe.BitCast<ColorBgra, uint> (Apply (
+					Unsafe.BitCast<uint, ColorBgra> (lhsU[2]),
+					Unsafe.BitCast<uint, ColorBgra> (rhsU[2]))),
+				Unsafe.BitCast<ColorBgra, uint> (Apply (
+					Unsafe.BitCast<uint, ColorBgra> (lhsU[3]),
+					Unsafe.BitCast<uint, ColorBgra> (rhsU[3])))
+			).AsByte ();
 		}
 
 		[MethodImpl (MethodImplOptions.AggressiveInlining)]

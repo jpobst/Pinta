@@ -49,18 +49,17 @@ partial class UserBlendOps
 				// (Cb ^ Ca) * Ab ≤ 65025 fits in ushort, then * Aa / 255 via DivBy255.
 				Vector128<ushort> xorVal = Cb ^ Ca;
 				Vector128<ushort> product = xorVal * Ab; // max 65025, fits ushort
-									 // DivBy255 of (product * Aa): we need (product * Aa + 128) / 255
+									 // DivBy255 of (product * Aa): product * Aa / 255
 									 // product * Aa max = 65025 * 255 = 16581375, needs uint
 				(Vector128<uint> prodLo, Vector128<uint> prodHi) = Vector128.Widen (product);
 				(Vector128<uint> aaLo, Vector128<uint> aaHi) = Vector128.Widen (Aa);
 				Vector128<uint> mulLo = prodLo * aaLo;
 				Vector128<uint> mulHi = prodHi * aaHi;
-				// DivBy255: (x + 128) / 255 ≈ (x + (x >> 8) + 129) >> 8 for x ≤ 16581375
-				Vector128<uint> v128u = Vector128.Create ((uint) 128);
+				// DivBy255Wide is exact for values up to ~16.7M (covers our max of 16581375)
 				Vector128<uint> vOne = Vector128.Create ((uint) 1);
 				Vector128<uint> v0xFF = Vector128.Create ((uint) 0xFF);
-				Vector128<uint> resLo = DivBy255Wide (mulLo + v128u, v0xFF, vOne);
-				Vector128<uint> resHi = DivBy255Wide (mulHi + v128u, v0xFF, vOne);
+				Vector128<uint> resLo = DivBy255Wide (mulLo, v0xFF, vOne);
+				Vector128<uint> resHi = DivBy255Wide (mulHi, v0xFF, vOne);
 				return Vector128.Min (Vector128.Narrow (resLo, resHi), Vector128.Create ((ushort) 65025));
 			}
 
