@@ -8,6 +8,9 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
 namespace Pinta.Core;
 
@@ -25,6 +28,55 @@ public abstract class BinaryPixelOp : PixelOp
 	{
 		for (int i = 0; i < dst.Length; ++i)
 			dst[i] = Apply (lhs[i], rhs[i]);
+	}
+
+	/// <summary>
+	/// Applies a SIMD-optimized blend operation over spans of pixels, using Vector256,
+	/// Vector128, and scalar fallback paths. The blend logic is provided by <typeparamref name="TBlend"/>.
+	/// </summary>
+	private protected static void ApplyLoop<TBlend> (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
+		where TBlend : struct, BlendOpHelper.IPixelBlend
+	{
+		int count = dst.Length;
+		int i = 0;
+
+		if (Vector256.IsHardwareAccelerated) {
+
+			ref byte dstRef = ref Unsafe.As<ColorBgra, byte> (
+				ref MemoryMarshal.GetReference (dst));
+			ref byte lhsRef = ref Unsafe.As<ColorBgra, byte> (
+				ref Unsafe.AsRef (in MemoryMarshal.GetReference (lhs)));
+			ref byte rhsRef = ref Unsafe.As<ColorBgra, byte> (
+				ref Unsafe.AsRef (in MemoryMarshal.GetReference (rhs)));
+
+			for (; i + 8 <= count; i += 8) {
+				nuint byteOff = (nuint) (i * 4);
+				Vector256<byte> bottom = Vector256.LoadUnsafe (ref lhsRef, byteOff);
+				Vector256<byte> top = Vector256.LoadUnsafe (ref rhsRef, byteOff);
+				TBlend.Apply (bottom, top).StoreUnsafe (ref dstRef, byteOff);
+			}
+		}
+
+		if (Vector128.IsHardwareAccelerated) {
+
+			ref byte dstRef = ref Unsafe.As<ColorBgra, byte> (
+				ref MemoryMarshal.GetReference (dst));
+			ref byte lhsRef = ref Unsafe.As<ColorBgra, byte> (
+				ref Unsafe.AsRef (in MemoryMarshal.GetReference (lhs)));
+			ref byte rhsRef = ref Unsafe.As<ColorBgra, byte> (
+				ref Unsafe.AsRef (in MemoryMarshal.GetReference (rhs)));
+
+			for (; i + 4 <= count; i += 4) {
+				nuint byteOff = (nuint) (i * 4);
+				Vector128<byte> bottom = Vector128.LoadUnsafe (ref lhsRef, byteOff);
+				Vector128<byte> top = Vector128.LoadUnsafe (ref rhsRef, byteOff);
+				TBlend.Apply (bottom, top).StoreUnsafe (ref dstRef, byteOff);
+			}
+		}
+
+		// Scalar fallback for remaining pixels (or when SIMD is unavailable)
+		for (; i < count; ++i)
+			dst[i] = TBlend.Apply (lhs[i], rhs[i]);
 	}
 
 	/// <summary>
@@ -88,8 +140,9 @@ public abstract class BinaryPixelOp : PixelOp
 
 	public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
 	{
-		for (int i = 0; i < src.Length; ++i)
-			dst[i] = Apply (dst[i], src[i]);
+		// Delegate to the 3-arg version so SIMD-optimized overrides are used.
+		// Reading from dst as lhs is safe: each pixel is read before being overwritten.
+		Apply (dst, (ReadOnlySpan<ColorBgra>) dst, src);
 	}
 
 	public void Apply (Cairo.ImageSurface dst, Cairo.ImageSurface src)
