@@ -1,13 +1,6 @@
-/////////////////////////////////////////////////////////////////////////////////
-// Paint.NET                                                                   //
-// Copyright (C) dotPDN LLC, Rick Brewster, Tom Jackson, and contributors.     //
-// Portions Copyright (C) Microsoft Corporation. All Rights Reserved.          //
-// See license-pdn.txt for full licensing and attribution details.             //
-//                                                                             //
-// Ported to Pinta by: Jonathan Pobst <monkey@jpobst.com>                      //
-/////////////////////////////////////////////////////////////////////////////////
-
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
 
 namespace Pinta.Core;
 
@@ -16,8 +9,55 @@ partial class UserBlendOps
 	[Serializable]
 	public sealed class NegationBlendOp : UserBlendOp
 	{
-		public static string StaticName => "Negation";
-		public override ColorBgra Apply (in ColorBgra lhs, in ColorBgra rhs) { int lhsA; { lhsA = ((lhs).A); }; int rhsA; { rhsA = ((rhs).A); }; int y; { y = ((lhsA) * (255 - rhsA) + 0x80); y = ((((y) >> 8) + (y)) >> 8); }; int totalA = y + rhsA; uint ret; if (totalA == 0) { ret = 0; } else { int fB; int fG; int fR; { fB = (255 - Math.Abs (255 - ((lhs).B) - ((rhs).B))); }; { fG = (255 - Math.Abs (255 - ((lhs).G) - ((rhs).G))); }; { fR = (255 - Math.Abs (255 - ((lhs).R) - ((rhs).R))); }; int x; { x = ((lhsA) * (rhsA) + 0x80); x = ((((x) >> 8) + (x)) >> 8); }; int z = rhsA - x; int masIndex = totalA * 3; uint taM = mas_table[masIndex]; uint taA = mas_table[masIndex + 1]; uint taS = mas_table[masIndex + 2]; uint b = (uint) (((((long) ((((lhs).B * y) + ((rhs).B * z) + (fB * x)))) * taM) + taA) >> (int) taS); uint g = (uint) (((((long) ((((lhs).G * y) + ((rhs).G * z) + (fG * x)))) * taM) + taA) >> (int) taS); uint r = (uint) (((((long) ((((lhs).R * y) + ((rhs).R * z) + (fR * x)))) * taM) + taA) >> (int) taS); int a; { { a = ((lhsA) * (255 - (rhsA)) + 0x80); a = ((((a) >> 8) + (a)) >> 8); }; a += (rhsA); }; ret = b + (g << 8) + (r << 16) + ((uint) a << 24); }; return ColorBgra.FromUInt32 (ret); }
-		public static ColorBgra ApplyStatic (in ColorBgra lhs, in ColorBgra rhs) { int lhsA; { lhsA = ((lhs).A); }; int rhsA; { rhsA = ((rhs).A); }; int y; { y = ((lhsA) * (255 - rhsA) + 0x80); y = ((((y) >> 8) + (y)) >> 8); }; int totalA = y + rhsA; uint ret; if (totalA == 0) { ret = 0; } else { int fB; int fG; int fR; { fB = (255 - Math.Abs (255 - ((lhs).B) - ((rhs).B))); }; { fG = (255 - Math.Abs (255 - ((lhs).G) - ((rhs).G))); }; { fR = (255 - Math.Abs (255 - ((lhs).R) - ((rhs).R))); }; int x; { x = ((lhsA) * (rhsA) + 0x80); x = ((((x) >> 8) + (x)) >> 8); }; int z = rhsA - x; int masIndex = totalA * 3; uint taM = mas_table[masIndex]; uint taA = mas_table[masIndex + 1]; uint taS = mas_table[masIndex + 2]; uint b = (uint) (((((long) ((((lhs).B * y) + ((rhs).B * z) + (fB * x)))) * taM) + taA) >> (int) taS); uint g = (uint) (((((long) ((((lhs).G * y) + ((rhs).G * z) + (fG * x)))) * taM) + taA) >> (int) taS); uint r = (uint) (((((long) ((((lhs).R * y) + ((rhs).R * z) + (fR * x)))) * taM) + taA) >> (int) taS); int a; { { a = ((lhsA) * (255 - (rhsA)) + 0x80); a = ((((a) >> 8) + (a)) >> 8); }; a += (rhsA); }; ret = b + (g << 8) + (r << 16) + ((uint) a << 24); }; return ColorBgra.FromUInt32 (ret); }
+		public static string StaticName
+			=> "Negation";
+
+		public override ColorBgra Apply (in ColorBgra bottom, in ColorBgra top)
+			=> ApplyStatic (bottom, top);
+
+		public static ColorBgra ApplyStatic (in ColorBgra bottom, in ColorBgra top)
+		{
+			// The Negation blend mode is similar to Difference, but produces a
+			// softer result. It inverts the color differences rather than
+			// taking absolute differences.
+
+			if (top.A == 0) return bottom;
+			if (bottom.A == 0) return top;
+
+			return BlendOpHelper.ComputePremultiplied<ChannelBlend> (bottom, top);
+		}
+
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
+			=> ApplyLoop<BlendOpHelper.PremultipliedBlend<ChannelBlend>> (dst, lhs, rhs);
+
+		private readonly struct ChannelBlend : BlendOpHelper.IVectorChannelBlend
+		{
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static int BlendChannel (int Cb, int Ca, int Ab, int Aa)
+				=> Aa * Ab - Math.Abs (Aa * Ab - Aa * Cb - Ab * Ca);
+
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static Vector128<ushort> BlendChannel (
+				Vector128<ushort> Cb, Vector128<ushort> Ca,
+				Vector128<ushort> Ab, Vector128<ushort> Aa)
+			{
+				// Aa*Ab - |Aa*Ab - (Aa*Cb + Ab*Ca)|
+				// The sum Aa*Cb + Ab*Ca can exceed ushort, so widen to uint.
+				Vector128<ushort> x = Aa * Ab;
+				(Vector128<uint> xLo, Vector128<uint> xHi) = Vector128.Widen (x);
+				(Vector128<uint> p1Lo, Vector128<uint> p1Hi) = Vector128.Widen (Aa * Cb);
+				(Vector128<uint> p2Lo, Vector128<uint> p2Hi) = Vector128.Widen (Ab * Ca);
+
+				Vector128<uint> yLo = p1Lo + p2Lo;
+				Vector128<uint> yHi = p1Hi + p2Hi;
+
+				// |x - y| via max - min
+				Vector128<uint> absLo = Vector128.Max (xLo, yLo) - Vector128.Min (xLo, yLo);
+				Vector128<uint> absHi = Vector128.Max (xHi, yHi) - Vector128.Min (xHi, yHi);
+
+				// x - |x - y|, result fits in ushort [0, 65025]
+				return Vector128.Narrow (xLo - absLo, xHi - absHi);
+			}
+		}
 	}
 }

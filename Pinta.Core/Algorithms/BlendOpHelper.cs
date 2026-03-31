@@ -1,4 +1,6 @@
+using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 
 namespace Pinta.Core;
@@ -92,6 +94,43 @@ internal static class BlendOpHelper
 		[MethodImpl (MethodImplOptions.AggressiveInlining)]
 		public static Vector256<byte> Apply (Vector256<byte> lhs, Vector256<byte> rhs)
 			=> ComputePremultiplied256<TChannel> (lhs, rhs);
+	}
+
+	/// <summary>
+	/// Adapter struct that wraps an <see cref="IChannelBlend"/> (scalar-only) into an <see cref="IPixelBlend"/>.
+	/// The SIMD paths process pixels individually (no vectorized channel blend), but the loop
+	/// infrastructure in <see cref="BinaryPixelOp.ApplyLoop{TBlend}"/> is still used uniformly.
+	/// Use <see cref="PremultipliedBlend{TChannel}"/> instead when an <see cref="IVectorChannelBlend"/>
+	/// implementation is available for better performance.
+	/// </summary>
+	public readonly struct ScalarPremultipliedBlend<TChannel> : IPixelBlend
+		where TChannel : struct, IChannelBlend
+	{
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		public static ColorBgra Apply (in ColorBgra lhs, in ColorBgra rhs)
+		{
+			if (rhs.A == 0) return lhs;
+			if (lhs.A == 0) return rhs;
+			return ComputePremultiplied<TChannel> (lhs, rhs);
+		}
+
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		public static Vector128<byte> Apply (Vector128<byte> lhs, Vector128<byte> rhs)
+		{
+			Span<ColorBgra> lhsPixels = stackalloc ColorBgra[4];
+			Span<ColorBgra> rhsPixels = stackalloc ColorBgra[4];
+			lhs.CopyTo (MemoryMarshal.AsBytes (lhsPixels));
+			rhs.CopyTo (MemoryMarshal.AsBytes (rhsPixels));
+			for (int i = 0; i < 4; i++)
+				lhsPixels[i] = Apply (lhsPixels[i], rhsPixels[i]);
+			return Vector128.Create<byte> (MemoryMarshal.AsBytes ((ReadOnlySpan<ColorBgra>) lhsPixels));
+		}
+
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		public static Vector256<byte> Apply (Vector256<byte> lhs, Vector256<byte> rhs)
+			=> Vector256.Create (
+				Apply (lhs.GetLower (), rhs.GetLower ()),
+				Apply (lhs.GetUpper (), rhs.GetUpper ()));
 	}
 
 	[MethodImpl (MethodImplOptions.AggressiveInlining)]
