@@ -37,7 +37,9 @@ public sealed class GaussianBlurEffect : BaseEffect
 	private readonly IWorkspaceService workspace;
 
 	// Thread-safe cache for the horizontal pass intermediate results.
-	// Computed once per (source, radius) and reused across concurrent Render calls.
+	// Computed once per (source, radius) pair and reused across concurrent
+	// Render calls that share the same source surface and blur radius
+	// (e.g. when AsyncEffectRenderer distributes row-tiles to worker threads).
 	private volatile HorizontalPassResult? horiz_cache;
 	private readonly object horiz_cache_lock = new ();
 
