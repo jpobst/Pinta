@@ -13,7 +13,7 @@ public sealed class PaintDotNetPalette : IPaletteLoader, IPaletteSaver
 	public List<ColorBgra> Load (Stream stream)
 	{
 		List<ColorBgra> colors = [];
-		using var reader = new StreamReader (stream);
+		using var reader = new StreamReader (stream, leaveOpen: true);
 
 		string? line = reader.ReadLine ();
 		do {
@@ -39,7 +39,7 @@ public sealed class PaintDotNetPalette : IPaletteLoader, IPaletteSaver
 
 	public void Save (IReadOnlyList<ColorBgra> colors, Stream stream)
 	{
-		using StreamWriter writer = new (stream);
+		using StreamWriter writer = new (stream, leaveOpen: true);
 
 		writer.WriteLine ("; Hexadecimal format: aarrggbb");
 
