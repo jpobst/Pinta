@@ -25,19 +25,38 @@ internal interface IPixelBlend
 }
 
 /// <summary>
+/// Interface for blend operations that provide 256-bit SIMD paths.
+/// Blend ops implement this to process 8 pixels at a time via Vector256.
+/// </summary>
+internal interface IPixelBlend8
+{
+	/// <summary>
+	/// Blends 8 bottom pixels with 8 top pixels using SIMD.
+	/// </summary>
+	static abstract PixelBatch8 Blend8 (PixelBatch8 bottom, PixelBatch8 top);
+}
+
+/// <summary>
 /// Interface for simple per-channel blend operations that can be auto-vectorized
 /// via the generic PremultipliedBlend helper.
 /// </summary>
 internal interface IVectorChannelBlend
 {
 	/// <summary>
-	/// Blends 8 channel values (2 pixels' worth of all 4 channels).
+	/// Blends 8 channel values (2 pixels' worth of all 4 channels) using Vector128.
 	/// Cb/Ca are channel values, Ab/Aa are alpha values (broadcast to all channels).
 	/// All values are widened ushorts.
 	/// </summary>
 	static abstract Vector128<ushort> BlendChannels (
 		Vector128<ushort> Cb, Vector128<ushort> Ca,
 		Vector128<ushort> Ab, Vector128<ushort> Aa);
+
+	/// <summary>
+	/// Blends 16 channel values (4 pixels' worth of all 4 channels) using Vector256.
+	/// </summary>
+	static abstract Vector256<ushort> BlendChannels256 (
+		Vector256<ushort> Cb, Vector256<ushort> Ca,
+		Vector256<ushort> Ab, Vector256<ushort> Aa);
 }
 
 /// <summary>
@@ -61,23 +80,36 @@ public abstract class BinaryPixelOp : PixelOp
 	}
 
 	/// <summary>
-	/// SIMD-accelerated batch processing loop. Processes 4 pixels at a time
-	/// using Vector128, with scalar fallback for remaining pixels.
+	/// SIMD-accelerated batch processing loop. Processes 8 pixels at a time
+	/// using Vector256 (when available), then 4 at a time using Vector128,
+	/// with scalar fallback for remaining pixels.
 	/// </summary>
 	[MethodImpl (MethodImplOptions.AggressiveInlining)]
-	internal void ApplyLoop<T> (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
-		where T : IPixelBlend
+	internal void ApplyLoop<T4, T8> (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
+		where T4 : IPixelBlend
+		where T8 : IPixelBlend8
 	{
 		int length = dst.Length;
 		int i = 0;
 
+		// Process 8 pixels at a time using Vector256
+		if (Vector256.IsHardwareAccelerated && length >= PixelBatch8.Count) {
+			int vectorEnd = length - (length % PixelBatch8.Count);
+			for (; i < vectorEnd; i += PixelBatch8.Count) {
+				var bottom = PixelBatch8.Load (lhs.Slice (i, PixelBatch8.Count));
+				var top = PixelBatch8.Load (rhs.Slice (i, PixelBatch8.Count));
+				var result = T8.Blend8 (bottom, top);
+				result.Store (dst.Slice (i, PixelBatch8.Count));
+			}
+		}
+
 		// Process 4 pixels at a time using Vector128
-		if (Vector128.IsHardwareAccelerated && length >= PixelBatch4.Count) {
-			int vectorEnd = length - (length % PixelBatch4.Count);
+		if (Vector128.IsHardwareAccelerated && length - i >= PixelBatch4.Count) {
+			int vectorEnd = length - ((length - i) % PixelBatch4.Count);
 			for (; i < vectorEnd; i += PixelBatch4.Count) {
 				var bottom = PixelBatch4.Load (lhs.Slice (i, PixelBatch4.Count));
 				var top = PixelBatch4.Load (rhs.Slice (i, PixelBatch4.Count));
-				var result = T.Blend4 (bottom, top);
+				var result = T4.Blend4 (bottom, top);
 				result.Store (dst.Slice (i, PixelBatch4.Count));
 			}
 		}

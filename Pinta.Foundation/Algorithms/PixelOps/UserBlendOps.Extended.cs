@@ -26,7 +26,8 @@ partial class UserBlendOps
 		}
 
 		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
-			=> ApplyLoop<BlendOpHelper.PremultipliedBlend<VectorChannelBlend>> (dst, lhs, rhs);
+			=> ApplyLoop<BlendOpHelper.PremultipliedBlend<VectorChannelBlend>,
+				     BlendOpHelper.PremultipliedBlend256<VectorChannelBlend>> (dst, lhs, rhs);
 
 		private readonly struct ChannelBlend : BlendOpHelper.IChannelBlend
 		{
@@ -54,6 +55,18 @@ partial class UserBlendOps
 				var condition = Vector128.LessThan (Ca * two, Aa);
 				return Vector128.ConditionalSelect (condition, multiply, screen);
 			}
+
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static Vector256<ushort> BlendChannels256 (
+				Vector256<ushort> Cb, Vector256<ushort> Ca,
+				Vector256<ushort> Ab, Vector256<ushort> Aa)
+			{
+				var two = Vector256.Create ((ushort) 2);
+				var multiply = two * Ca * Cb;
+				var screen = Aa * Ab - two * (Aa - Ca) * (Ab - Cb);
+				var condition = Vector256.LessThan (Ca * two, Aa);
+				return Vector256.ConditionalSelect (condition, multiply, screen);
+			}
 		}
 	}
 
@@ -78,7 +91,8 @@ partial class UserBlendOps
 		}
 
 		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
-			=> ApplyLoop<BlendOpHelper.ScalarPremultipliedBlend<ChannelBlend>> (dst, lhs, rhs);
+			=> ApplyLoop<BlendOpHelper.ScalarPremultipliedBlend<ChannelBlend>,
+				     BlendOpHelper.ScalarPremultipliedBlend256<ChannelBlend>> (dst, lhs, rhs);
 
 		private readonly struct ChannelBlend : BlendOpHelper.IChannelBlend
 		{

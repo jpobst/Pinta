@@ -23,7 +23,8 @@ partial class UserBlendOps
 		}
 
 		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
-			=> ApplyLoop<BlendOpHelper.PremultipliedBlend<VectorChannelBlend>> (dst, lhs, rhs);
+			=> ApplyLoop<BlendOpHelper.PremultipliedBlend<VectorChannelBlend>,
+				     BlendOpHelper.PremultipliedBlend256<VectorChannelBlend>> (dst, lhs, rhs);
 
 		private readonly struct ChannelBlend : BlendOpHelper.IChannelBlend
 		{
@@ -38,12 +39,13 @@ partial class UserBlendOps
 			public static Vector128<ushort> BlendChannels (
 				Vector128<ushort> Cb, Vector128<ushort> Ca,
 				Vector128<ushort> Ab, Vector128<ushort> Aa)
-			{
-				// Screen: Aa*Cb + Ab*Ca - Ca*Cb
-				// Use wrapping arithmetic (ushort wraps at 65536, which is fine since
-				// intermediate overflow is handled correctly for byte-range values)
-				return Aa * Cb + Ab * Ca - Ca * Cb;
-			}
+				=> Aa * Cb + Ab * Ca - Ca * Cb;
+
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static Vector256<ushort> BlendChannels256 (
+				Vector256<ushort> Cb, Vector256<ushort> Ca,
+				Vector256<ushort> Ab, Vector256<ushort> Aa)
+				=> Aa * Cb + Ab * Ca - Ca * Cb;
 		}
 	}
 }

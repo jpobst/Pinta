@@ -35,7 +35,7 @@ internal readonly struct PixelBatch8
 
 	private static readonly Vector256<byte> AlphaShuffle = Vector256.Create (
 		(byte) 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15,
-		3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15);
+		19, 19, 19, 19, 23, 23, 23, 23, 27, 27, 27, 27, 31, 31, 31, 31);
 
 	[MethodImpl (MethodImplOptions.AggressiveInlining)]
 	public readonly PixelBatch8 BroadcastAlpha ()

@@ -55,27 +55,45 @@ partial struct ColorBgra
 
 	/// <summary>
 	/// SIMD-accelerated batch lerp: dst[i] = Lerp(from[i], to[i], frac).
-	/// Processes 4 pixels at a time using Vector128.
+	/// Processes 8 pixels at a time using Vector256, then 4 using Vector128.
 	/// </summary>
 	public static void LerpBatch (ReadOnlySpan<ColorBgra> from, ReadOnlySpan<ColorBgra> to, byte frac, Span<ColorBgra> dst)
 	{
 		int length = dst.Length;
 		int i = 0;
 
-		if (Vector128.IsHardwareAccelerated && length >= PixelBatch4.Count) {
+		if (Vector256.IsHardwareAccelerated && length >= PixelBatch8.Count) {
+			var fracVec256 = Vector256.Create ((ushort) frac);
+			var invFracVec256 = Vector256.Create ((ushort) (255 - frac));
+			int vectorEnd = length - (length % PixelBatch8.Count);
+			for (; i < vectorEnd; i += PixelBatch8.Count) {
+				var fromBatch = PixelBatch8.Load (from.Slice (i, PixelBatch8.Count));
+				var toBatch = PixelBatch8.Load (to.Slice (i, PixelBatch8.Count));
+
+				var fromLo = fromBatch.WidenLow ();
+				var toLo = toBatch.WidenLow ();
+				var resultLo = PixelBatch8.DivBy255 (fromLo * invFracVec256 + toLo * fracVec256);
+
+				var fromHi = fromBatch.WidenHigh ();
+				var toHi = toBatch.WidenHigh ();
+				var resultHi = PixelBatch8.DivBy255 (fromHi * invFracVec256 + toHi * fracVec256);
+
+				PixelBatch8.NarrowSaturate (resultLo, resultHi).Store (dst.Slice (i, PixelBatch8.Count));
+			}
+		}
+
+		if (Vector128.IsHardwareAccelerated && length - i >= PixelBatch4.Count) {
 			var fracVec = Vector128.Create ((ushort) frac);
 			var invFracVec = Vector128.Create ((ushort) (255 - frac));
-			int vectorEnd = length - (length % PixelBatch4.Count);
+			int vectorEnd = i + ((length - i) / PixelBatch4.Count * PixelBatch4.Count);
 			for (; i < vectorEnd; i += PixelBatch4.Count) {
 				var fromBatch = PixelBatch4.Load (from.Slice (i, PixelBatch4.Count));
 				var toBatch = PixelBatch4.Load (to.Slice (i, PixelBatch4.Count));
 
-				// Low 2 pixels
 				var fromLo = fromBatch.WidenLow ();
 				var toLo = toBatch.WidenLow ();
 				var resultLo = PixelBatch4.DivBy255 (fromLo * invFracVec + toLo * fracVec);
 
-				// High 2 pixels
 				var fromHi = fromBatch.WidenHigh ();
 				var toHi = toBatch.WidenHigh ();
 				var resultHi = PixelBatch4.DivBy255 (fromHi * invFracVec + toHi * fracVec);
@@ -126,7 +144,7 @@ partial struct ColorBgra
 
 	/// <summary>
 	/// Smoothly blends the given colors together, assuming equal weighting for each one.
-	/// Uses SIMD to accumulate channel sums when hardware accelerated.
+	/// Uses SIMD to accumulate channel sums: Vector256 (8 pixels) then Vector128 (4 pixels).
 	/// It is assumed that pre-multiplied alpha is used.
 	/// </summary>
 	public static ColorBgra Blend (ReadOnlySpan<ColorBgra> colors)
@@ -152,48 +170,56 @@ partial struct ColorBgra
 				ClampToByte ((int) (totalA / count)));
 		}
 
-		// SIMD accumulate: widen each pixel's bytes to ushort, accumulate in uint vectors
 		var sumLo = Vector128<uint>.Zero;
 		var sumHi = Vector128<uint>.Zero;
 		int i2 = 0;
-		int vectorEnd = count - (count % PixelBatch4.Count);
 
-		for (; i2 < vectorEnd; i2 += PixelBatch4.Count) {
-			var batch = PixelBatch4.Load (colors.Slice (i2, PixelBatch4.Count));
-			var lo = batch.WidenLow (); // 8 ushorts (pixels 0-1)
-			var hi = batch.WidenHigh (); // 8 ushorts (pixels 2-3)
-
-			// Widen ushorts to uint and accumulate
-			(var loLo, var loHi) = Vector128.Widen (lo);
-			sumLo += loLo;
-			sumHi += loHi;
-			(var hiLo, var hiHi) = Vector128.Widen (hi);
-			sumLo += hiLo;
-			sumHi += hiHi;
+		// Vector256 accumulation: process 8 pixels at a time
+		if (Vector256.IsHardwareAccelerated && count >= PixelBatch8.Count) {
+			var sum256Lo = Vector256<uint>.Zero;
+			var sum256Hi = Vector256<uint>.Zero;
+			int vectorEnd256 = count - (count % PixelBatch8.Count);
+			for (; i2 < vectorEnd256; i2 += PixelBatch8.Count) {
+				var batch = PixelBatch8.Load (colors.Slice (i2, PixelBatch8.Count));
+				var lo = batch.WidenLow ();
+				var hi = batch.WidenHigh ();
+				(var loLo, var loHi) = Vector256.Widen (lo);
+				sum256Lo += loLo;
+				sum256Hi += loHi;
+				(var hiLo, var hiHi) = Vector256.Widen (hi);
+				sum256Lo += hiLo;
+				sum256Hi += hiHi;
+			}
+			// Reduce 256-bit sums to 128-bit
+			sumLo = sum256Lo.GetLower () + sum256Lo.GetUpper ();
+			sumHi = sum256Hi.GetLower () + sum256Hi.GetUpper ();
 		}
 
-		// Extract sums: sumLo has (B01, G01, R01, A01) accumulated, sumHi has (B23, G23, R23, A23)
-		// Since BGRA interleaved, positions 0,4 = B sums, 1,5 = G sums, etc.
-		// Actually the widening is sequential, so we need to extract differently.
-		// Let's just extract and sum scalarly after the vector accumulation.
+		// Vector128 accumulation: process 4 pixels at a time
+		if (count - i2 >= PixelBatch4.Count) {
+			int vectorEnd = i2 + ((count - i2) / PixelBatch4.Count * PixelBatch4.Count);
+			for (; i2 < vectorEnd; i2 += PixelBatch4.Count) {
+				var batch = PixelBatch4.Load (colors.Slice (i2, PixelBatch4.Count));
+				var lo = batch.WidenLow ();
+				var hi = batch.WidenHigh ();
+				(var loLo, var loHi) = Vector128.Widen (lo);
+				sumLo += loLo;
+				sumHi += loHi;
+				(var hiLo, var hiHi) = Vector128.Widen (hi);
+				sumLo += hiLo;
+				sumHi += hiHi;
+			}
+		}
+
 		uint[] sums = new uint[8];
 		sumLo.CopyTo (sums);
 		sumHi.CopyTo (sums, 4);
 
-		// The sums are interleaved BGRA from the widen operations:
-		// sumLo = [sum_of_B0_B4_..., sum_of_G0_G4_..., sum_of_R0_R4_..., sum_of_A0_A4_...]
-		// sumHi = [sum_of_B1_B5_..., sum_of_G1_G5_..., sum_of_R1_R5_..., sum_of_A1_A5_...]
-		// Wait, that's not right. Let me reconsider the widening layout.
-		// WidenLow gives the first 8 bytes as ushorts: B0,G0,R0,A0,B1,G1,R1,A1
-		// Widen(ushort) gives first 4 as uints: B0,G0,R0,A0 and last 4: B1,G1,R1,A1
-		// So sumLo accumulates per-channel sums for even-indexed pixels, sumHi for odd.
-		// We need: totalB = sums[0]+sums[4], totalG = sums[1]+sums[5], etc.
 		long totalB2 = sums[0] + sums[4];
 		long totalG2 = sums[1] + sums[5];
 		long totalR2 = sums[2] + sums[6];
 		long totalA2 = sums[3] + sums[7];
 
-		// Add remaining scalar pixels
 		for (; i2 < count; i2++) {
 			totalB2 += colors[i2].B;
 			totalG2 += colors[i2].G;
@@ -248,30 +274,52 @@ partial struct ColorBgra
 
 	/// <summary>
 	/// SIMD-accelerated batch conversion from straight alpha to premultiplied alpha.
+	/// Uses Vector256 (8 pixels) then Vector128 (4 pixels).
 	/// </summary>
 	public static void ToPremultipliedAlphaBatch (ReadOnlySpan<ColorBgra> src, Span<ColorBgra> dst)
 	{
 		int length = src.Length;
 		int i = 0;
+		var alphaMask16 = Vector128.Create ((ushort) 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF);
 
-		if (Vector128.IsHardwareAccelerated && length >= PixelBatch4.Count) {
-			int vectorEnd = length - (length % PixelBatch4.Count);
+		if (Vector256.IsHardwareAccelerated && length >= PixelBatch8.Count) {
+			var alphaMask16_256 = Vector256.Create (
+				(ushort) 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF,
+				0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF);
+			int vectorEnd = length - (length % PixelBatch8.Count);
+			for (; i < vectorEnd; i += PixelBatch8.Count) {
+				var batch = PixelBatch8.Load (src.Slice (i, PixelBatch8.Count));
+				var alpha = batch.BroadcastAlpha ();
+
+				var lo = batch.WidenLow ();
+				var alphaLo = alpha.WidenLow ();
+				var premulLo = PixelBatch8.DivBy255 (lo * alphaLo);
+				premulLo = Vector256.ConditionalSelect (alphaMask16_256, alphaLo, premulLo);
+
+				var hi = batch.WidenHigh ();
+				var alphaHi = alpha.WidenHigh ();
+				var premulHi = PixelBatch8.DivBy255 (hi * alphaHi);
+				premulHi = Vector256.ConditionalSelect (alphaMask16_256, alphaHi, premulHi);
+
+				PixelBatch8.NarrowSaturate (premulLo, premulHi).Store (dst.Slice (i, PixelBatch8.Count));
+			}
+		}
+
+		if (Vector128.IsHardwareAccelerated && length - i >= PixelBatch4.Count) {
+			int vectorEnd = i + ((length - i) / PixelBatch4.Count * PixelBatch4.Count);
 			for (; i < vectorEnd; i += PixelBatch4.Count) {
 				var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
 				var alpha = batch.BroadcastAlpha ();
 
-				// Premultiply: C = C * A / 255
 				var lo = batch.WidenLow ();
 				var alphaLo = alpha.WidenLow ();
 				var premulLo = PixelBatch4.DivBy255 (lo * alphaLo);
-				// Restore alpha channel
-				var alphaMask = Vector128.Create ((ushort) 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF);
-				premulLo = Vector128.ConditionalSelect (alphaMask, alphaLo, premulLo);
+				premulLo = Vector128.ConditionalSelect (alphaMask16, alphaLo, premulLo);
 
 				var hi = batch.WidenHigh ();
 				var alphaHi = alpha.WidenHigh ();
 				var premulHi = PixelBatch4.DivBy255 (hi * alphaHi);
-				premulHi = Vector128.ConditionalSelect (alphaMask, alphaHi, premulHi);
+				premulHi = Vector128.ConditionalSelect (alphaMask16, alphaHi, premulHi);
 
 				PixelBatch4.NarrowSaturate (premulLo, premulHi).Store (dst.Slice (i, PixelBatch4.Count));
 			}

@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 
@@ -82,31 +83,28 @@ internal static class BlendOpHelper
 		public static PixelBatch4 Blend4 (PixelBatch4 bottom, PixelBatch4 top)
 		{
 			var ones = Vector128.Create ((ushort) 255);
+			var alphaMask = Vector128.Create ((ushort) 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF);
 
 			// Process low 2 pixels (bytes 0-7)
 			var botLo = bottom.WidenLow ();
 			var topLo = top.WidenLow ();
-			var botAlphaLo = WidenAlphaBroadcast (bottom.BroadcastAlpha ().WidenLow ());
-			var topAlphaLo = WidenAlphaBroadcast (top.BroadcastAlpha ().WidenLow ());
+			var botAlphaLo = bottom.BroadcastAlpha ().WidenLow ();
+			var topAlphaLo = top.BroadcastAlpha ().WidenLow ();
 			var invBotAlphaLo = ones - botAlphaLo;
 			var invTopAlphaLo = ones - topAlphaLo;
 
-			// C_out = (invBotAlpha*top + invTopAlpha*bot + Blend(bot,top,botA,topA) + 128) / 255
 			var blendLo = TBlend.BlendChannels (botLo, topLo, botAlphaLo, topAlphaLo);
 			var resultLo = invBotAlphaLo * topLo + invTopAlphaLo * botLo + blendLo;
 			resultLo = PixelBatch4.DivBy255Rounded (resultLo);
 
-			// Alpha: outA = topA + (botA * invTopA + 128) / 255
 			var alphaOutLo = topAlphaLo + PixelBatch4.DivBy255Rounded (botAlphaLo * invTopAlphaLo);
-
-			// Merge alpha into color result
-			resultLo = BlendAlphaIntoResult (resultLo, alphaOutLo);
+			resultLo = Vector128.ConditionalSelect (alphaMask, alphaOutLo, resultLo);
 
 			// Process high 2 pixels (bytes 8-15)
 			var botHi = bottom.WidenHigh ();
 			var topHi = top.WidenHigh ();
-			var botAlphaHi = WidenAlphaBroadcast (bottom.BroadcastAlpha ().WidenHigh ());
-			var topAlphaHi = WidenAlphaBroadcast (top.BroadcastAlpha ().WidenHigh ());
+			var botAlphaHi = bottom.BroadcastAlpha ().WidenHigh ();
+			var topAlphaHi = top.BroadcastAlpha ().WidenHigh ();
 			var invBotAlphaHi = ones - botAlphaHi;
 			var invTopAlphaHi = ones - topAlphaHi;
 
@@ -115,30 +113,63 @@ internal static class BlendOpHelper
 			resultHi = PixelBatch4.DivBy255Rounded (resultHi);
 
 			var alphaOutHi = topAlphaHi + PixelBatch4.DivBy255Rounded (botAlphaHi * invTopAlphaHi);
-			resultHi = BlendAlphaIntoResult (resultHi, alphaOutHi);
+			resultHi = Vector128.ConditionalSelect (alphaMask, alphaOutHi, resultHi);
 
 			return PixelBatch4.NarrowSaturate (resultLo, resultHi);
 		}
+	}
 
-		/// <summary>Ensures the alpha channel in the ushort vector is already broadcast.</summary>
+	/// <summary>
+	/// Vector256 version of PremultipliedBlend: processes 8 pixels at a time.
+	/// </summary>
+	internal readonly struct PremultipliedBlend256<TBlend> : IPixelBlend8
+		where TBlend : IVectorChannelBlend
+	{
 		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		private static Vector128<ushort> WidenAlphaBroadcast (Vector128<ushort> v) => v;
-
-		/// <summary>Replace the alpha channel in result with the computed alpha.</summary>
-		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		private static Vector128<ushort> BlendAlphaIntoResult (Vector128<ushort> result, Vector128<ushort> alpha)
+		public static PixelBatch8 Blend8 (PixelBatch8 bottom, PixelBatch8 top)
 		{
-			// Alpha positions are at indices 3 and 7 in the ushort vector
-			// Since alpha was broadcast, we already have alpha at all positions
-			// But we need to put the outAlpha only in the alpha slots
-			var alphaMask = Vector128.Create ((ushort) 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF);
-			return Vector128.ConditionalSelect (alphaMask, alpha, result);
+			var ones = Vector256.Create ((ushort) 255);
+			var alphaMask = Vector256.Create (
+				(ushort) 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF,
+				0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF);
+
+			// Process low 4 pixels
+			var botLo = bottom.WidenLow ();
+			var topLo = top.WidenLow ();
+			var botAlphaLo = bottom.BroadcastAlpha ().WidenLow ();
+			var topAlphaLo = top.BroadcastAlpha ().WidenLow ();
+			var invBotAlphaLo = ones - botAlphaLo;
+			var invTopAlphaLo = ones - topAlphaLo;
+
+			var blendLo = TBlend.BlendChannels256 (botLo, topLo, botAlphaLo, topAlphaLo);
+			var resultLo = invBotAlphaLo * topLo + invTopAlphaLo * botLo + blendLo;
+			resultLo = PixelBatch8.DivBy255Rounded (resultLo);
+
+			var alphaOutLo = topAlphaLo + PixelBatch8.DivBy255Rounded (botAlphaLo * invTopAlphaLo);
+			resultLo = Vector256.ConditionalSelect (alphaMask, alphaOutLo, resultLo);
+
+			// Process high 4 pixels
+			var botHi = bottom.WidenHigh ();
+			var topHi = top.WidenHigh ();
+			var botAlphaHi = bottom.BroadcastAlpha ().WidenHigh ();
+			var topAlphaHi = top.BroadcastAlpha ().WidenHigh ();
+			var invBotAlphaHi = ones - botAlphaHi;
+			var invTopAlphaHi = ones - topAlphaHi;
+
+			var blendHi = TBlend.BlendChannels256 (botHi, topHi, botAlphaHi, topAlphaHi);
+			var resultHi = invBotAlphaHi * topHi + invTopAlphaHi * botHi + blendHi;
+			resultHi = PixelBatch8.DivBy255Rounded (resultHi);
+
+			var alphaOutHi = topAlphaHi + PixelBatch8.DivBy255Rounded (botAlphaHi * invTopAlphaHi);
+			resultHi = Vector256.ConditionalSelect (alphaMask, alphaOutHi, resultHi);
+
+			return PixelBatch8.NarrowSaturate (resultLo, resultHi);
 		}
 	}
 
 	/// <summary>
 	/// Adapter for blend ops that can't vectorize their BlendChannel (division-based).
-	/// Uses scalar premultiplied blend per pixel but still gets called from the SIMD loop.
+	/// Uses scalar premultiplied blend per pixel but still benefits from SIMD load/store.
 	/// </summary>
 	internal readonly struct ScalarPremultipliedBlend<TChannelBlend> : IPixelBlend
 		where TChannelBlend : IChannelBlend
@@ -146,7 +177,6 @@ internal static class BlendOpHelper
 		[MethodImpl (MethodImplOptions.AggressiveInlining)]
 		public static PixelBatch4 Blend4 (PixelBatch4 bottom, PixelBatch4 top)
 		{
-			// Extract 4 pixels, blend each with the scalar path, repack
 			var botData = bottom.Data.AsUInt32 ();
 			var topData = top.Data.AsUInt32 ();
 
@@ -171,6 +201,32 @@ internal static class BlendOpHelper
 				Unsafe.BitCast<ColorBgra, uint> (r1),
 				Unsafe.BitCast<ColorBgra, uint> (r2),
 				Unsafe.BitCast<ColorBgra, uint> (r3)).AsByte ());
+		}
+	}
+
+	/// <summary>
+	/// Vector256 scalar adapter: processes 8 pixels individually but benefits from
+	/// SIMD load/store batching.
+	/// </summary>
+	internal readonly struct ScalarPremultipliedBlend256<TChannelBlend> : IPixelBlend8
+		where TChannelBlend : IChannelBlend
+	{
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		public static PixelBatch8 Blend8 (PixelBatch8 bottom, PixelBatch8 top)
+		{
+			var botData = bottom.Data.AsUInt32 ();
+			var topData = top.Data.AsUInt32 ();
+
+			Span<uint> results = stackalloc uint[8];
+			for (int i = 0; i < 8; i++) {
+				var b = Unsafe.BitCast<uint, ColorBgra> (botData.GetElement (i));
+				var t = Unsafe.BitCast<uint, ColorBgra> (topData.GetElement (i));
+				results[i] = Unsafe.BitCast<ColorBgra, uint> (ComputePremultiplied<TChannelBlend> (b, t));
+			}
+
+			return new PixelBatch8 (Vector256.Create (
+				results[0], results[1], results[2], results[3],
+				results[4], results[5], results[6], results[7]).AsByte ());
 		}
 	}
 }

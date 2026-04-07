@@ -22,13 +22,9 @@ partial class UserBlendOps
 			return BlendOpHelper.ComputePremultiplied<ChannelBlend> (bottom, top);
 		}
 
-		/// <summary>
-		/// SIMD-accelerated batch blend with early-exit optimization.
-		/// Detects fully opaque/transparent batches and uses fast copy paths.
-		/// </summary>
 		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
 		{
-			ApplyLoop<SimdBlend> (dst, lhs, rhs);
+			ApplyLoop<SimdBlend4, SimdBlend8> (dst, lhs, rhs);
 		}
 
 		private readonly struct ChannelBlend : BlendOpHelper.IChannelBlend
@@ -38,25 +34,25 @@ partial class UserBlendOps
 				=> Ab * Ca;
 		}
 
-		/// <summary>
-		/// SIMD implementation with early-exit: if all 4 pixels are opaque, copy top;
-		/// if all transparent, copy bottom; otherwise full blend.
-		/// </summary>
-		private readonly struct SimdBlend : IPixelBlend
+		private readonly struct SimdBlend4 : IPixelBlend
 		{
 			[MethodImpl (MethodImplOptions.AggressiveInlining)]
 			public static PixelBatch4 Blend4 (PixelBatch4 bottom, PixelBatch4 top)
 			{
-				// Early-exit: fully opaque top → just return top
-				if (top.AllOpaque ())
-					return top;
-
-				// Early-exit: fully transparent top → just return bottom
-				if (top.AllTransparent ())
-					return bottom;
-
-				// Full SIMD premultiplied blend
+				if (top.AllOpaque ()) return top;
+				if (top.AllTransparent ()) return bottom;
 				return BlendOpHelper.PremultipliedBlend<VectorChannelBlend>.Blend4 (bottom, top);
+			}
+		}
+
+		private readonly struct SimdBlend8 : IPixelBlend8
+		{
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static PixelBatch8 Blend8 (PixelBatch8 bottom, PixelBatch8 top)
+			{
+				if (top.AllOpaque ()) return top;
+				if (top.AllTransparent ()) return bottom;
+				return BlendOpHelper.PremultipliedBlend256<VectorChannelBlend>.Blend8 (bottom, top);
 			}
 		}
 
@@ -66,6 +62,12 @@ partial class UserBlendOps
 			public static Vector128<ushort> BlendChannels (
 				Vector128<ushort> Cb, Vector128<ushort> Ca,
 				Vector128<ushort> Ab, Vector128<ushort> Aa)
+				=> Ab * Ca;
+
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static Vector256<ushort> BlendChannels256 (
+				Vector256<ushort> Cb, Vector256<ushort> Ca,
+				Vector256<ushort> Ab, Vector256<ushort> Aa)
 				=> Ab * Ca;
 		}
 	}
