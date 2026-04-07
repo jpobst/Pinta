@@ -6,8 +6,39 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
 namespace Pinta.Foundation;
+
+/// <summary>
+/// Interface for blend operations that provide vectorized SIMD paths.
+/// Blend ops implement this to process 4 pixels at a time via Vector128.
+/// </summary>
+internal interface IPixelBlend
+{
+	/// <summary>
+	/// Blends 4 bottom pixels with 4 top pixels using SIMD.
+	/// </summary>
+	static abstract PixelBatch4 Blend4 (PixelBatch4 bottom, PixelBatch4 top);
+}
+
+/// <summary>
+/// Interface for simple per-channel blend operations that can be auto-vectorized
+/// via the generic PremultipliedBlend helper.
+/// </summary>
+internal interface IVectorChannelBlend
+{
+	/// <summary>
+	/// Blends 8 channel values (2 pixels' worth of all 4 channels).
+	/// Cb/Ca are channel values, Ab/Aa are alpha values (broadcast to all channels).
+	/// All values are widened ushorts.
+	/// </summary>
+	static abstract Vector128<ushort> BlendChannels (
+		Vector128<ushort> Cb, Vector128<ushort> Ca,
+		Vector128<ushort> Ab, Vector128<ushort> Aa);
+}
 
 /// <summary>
 /// Defines a way to operate on a pixel, or a region of pixels, in a binary fashion.
@@ -19,9 +50,40 @@ public abstract class BinaryPixelOp : PixelOp
 {
 	public abstract ColorBgra Apply (in ColorBgra lhs, in ColorBgra rhs);
 
+	/// <summary>
+	/// Applies the blend operation to spans of pixels.
+	/// Subclasses with SIMD support should override this to call ApplyLoop.
+	/// </summary>
 	public virtual void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
 	{
 		for (int i = 0; i < dst.Length; ++i)
+			dst[i] = Apply (lhs[i], rhs[i]);
+	}
+
+	/// <summary>
+	/// SIMD-accelerated batch processing loop. Processes 4 pixels at a time
+	/// using Vector128, with scalar fallback for remaining pixels.
+	/// </summary>
+	[MethodImpl (MethodImplOptions.AggressiveInlining)]
+	internal void ApplyLoop<T> (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
+		where T : IPixelBlend
+	{
+		int length = dst.Length;
+		int i = 0;
+
+		// Process 4 pixels at a time using Vector128
+		if (Vector128.IsHardwareAccelerated && length >= PixelBatch4.Count) {
+			int vectorEnd = length - (length % PixelBatch4.Count);
+			for (; i < vectorEnd; i += PixelBatch4.Count) {
+				var bottom = PixelBatch4.Load (lhs.Slice (i, PixelBatch4.Count));
+				var top = PixelBatch4.Load (rhs.Slice (i, PixelBatch4.Count));
+				var result = T.Blend4 (bottom, top);
+				result.Store (dst.Slice (i, PixelBatch4.Count));
+			}
+		}
+
+		// Scalar fallback for remaining pixels
+		for (; i < length; ++i)
 			dst[i] = Apply (lhs[i], rhs[i]);
 	}
 

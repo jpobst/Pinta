@@ -7,6 +7,8 @@
 
 using System;
 using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
 
 namespace Pinta.Foundation;
 
@@ -30,18 +32,49 @@ public static class UnaryPixelOps
 
 	/// <summary>
 	/// Always returns a constant color.
+	/// SIMD: broadcasts the constant across all 4 pixels.
 	/// </summary>
 	[Serializable]
 	public sealed class Constant : UnaryPixelOp
 	{
 		private readonly ColorBgra set_color;
+		private readonly Vector128<byte> simd_color;
 
 		public override ColorBgra Apply (in ColorBgra color)
 			=> set_color;
 
+		/// <summary>SIMD: fill all pixels with constant.</summary>
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
+		{
+			int i = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; i < vectorEnd; i += PixelBatch4.Count)
+					new PixelBatch4 (simd_color).Store (dst.Slice (i, PixelBatch4.Count));
+			}
+			for (; i < dst.Length; ++i)
+				dst[i] = set_color;
+		}
+
+		/// <summary>SIMD: fill all pixels with constant (in-place).</summary>
+		public override void Apply (Span<ColorBgra> dst)
+		{
+			int i = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; i < vectorEnd; i += PixelBatch4.Count)
+					new PixelBatch4 (simd_color).Store (dst.Slice (i, PixelBatch4.Count));
+			}
+			for (; i < dst.Length; ++i)
+				dst[i] = set_color;
+		}
+
 		public Constant (ColorBgra setColor)
 		{
 			set_color = setColor;
+			// Broadcast the constant pixel to all 4 pixel positions in Vector128
+			uint bgra = setColor.BGRA;
+			simd_color = Vector128.Create (bgra, bgra, bgra, bgra).AsByte ();
 		}
 	}
 
@@ -97,33 +130,105 @@ public static class UnaryPixelOps
 
 	/// <summary>
 	/// Specialization of SetChannel that sets the alpha channel.
+	/// SIMD: mask off alpha and OR in new alpha value.
 	/// </summary>
 	[Serializable]
 	public sealed class SetAlphaChannel : UnaryPixelOp
 	{
 		private readonly uint add_value;
+		private readonly Vector128<byte> simd_alpha;
+		private static readonly Vector128<byte> ColorMask128 = Vector128.Create (
+			(byte) 0xFF, 0xFF, 0xFF, 0, 0xFF, 0xFF, 0xFF, 0, 0xFF, 0xFF, 0xFF, 0, 0xFF, 0xFF, 0xFF, 0);
 
 		public override ColorBgra Apply (in ColorBgra color)
 			=> ColorBgra.FromUInt32 ((color.BGRA & 0x00ffffff) + add_value);
 
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
+		{
+			int i = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; i < vectorEnd; i += PixelBatch4.Count) {
+					var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
+					var result = new PixelBatch4 ((batch.Data & ColorMask128) | simd_alpha);
+					result.Store (dst.Slice (i, PixelBatch4.Count));
+				}
+			}
+			for (; i < dst.Length; ++i)
+				dst[i] = Apply (src[i]);
+		}
+
+		public override void Apply (Span<ColorBgra> dst)
+		{
+			int i = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; i < vectorEnd; i += PixelBatch4.Count) {
+					var slice = dst.Slice (i, PixelBatch4.Count);
+					var batch = PixelBatch4.Load (slice);
+					var result = new PixelBatch4 ((batch.Data & ColorMask128) | simd_alpha);
+					result.Store (slice);
+				}
+			}
+			for (; i < dst.Length; ++i)
+				dst[i] = Apply (dst[i]);
+		}
+
 		public SetAlphaChannel (byte alphaValue)
 		{
 			add_value = (uint) alphaValue << 24;
+			simd_alpha = Vector128.Create (
+				(byte) 0, 0, 0, alphaValue, 0, 0, 0, alphaValue,
+				0, 0, 0, alphaValue, 0, 0, 0, alphaValue);
 		}
 	}
 
 	/// <summary>
 	/// Specialization of SetAlphaChannel that always sets alpha to 255.
+	/// SIMD: OR with alpha mask (0xFF in alpha positions).
 	/// </summary>
 	[Serializable]
 	public sealed class SetAlphaChannelTo255 : UnaryPixelOp
 	{
+		private static readonly Vector128<byte> AlphaMask128 = Vector128.Create (
+			(byte) 0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0, 0, 0xFF);
+
 		public override ColorBgra Apply (in ColorBgra color)
 			=> ColorBgra.FromUInt32 (color.BGRA | 0xff000000);
+
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
+		{
+			int i = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; i < vectorEnd; i += PixelBatch4.Count) {
+					var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
+					new PixelBatch4 (batch.Data | AlphaMask128).Store (dst.Slice (i, PixelBatch4.Count));
+				}
+			}
+			for (; i < dst.Length; ++i)
+				dst[i] = Apply (src[i]);
+		}
+
+		public override void Apply (Span<ColorBgra> dst)
+		{
+			int i = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; i < vectorEnd; i += PixelBatch4.Count) {
+					var slice = dst.Slice (i, PixelBatch4.Count);
+					var batch = PixelBatch4.Load (slice);
+					new PixelBatch4 (batch.Data | AlphaMask128).Store (slice);
+				}
+			}
+			for (; i < dst.Length; ++i)
+				dst[i] = Apply (dst[i]);
+		}
 	}
 
 	/// <summary>
 	/// Inverts a pixel's color, and passes through the alpha component.
+	/// SIMD: For premultiplied alpha, invert = A - C for each color channel.
 	/// </summary>
 	[Serializable]
 	public sealed class Invert : UnaryPixelOp
@@ -136,6 +241,46 @@ public static class UnaryPixelOps
 				g: (byte) (color.A - color.G),
 				r: (byte) (color.A - color.R),
 				a: color.A);
+		}
+
+		/// <summary>SIMD invert: alpha - color for each channel, keep alpha.</summary>
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
+		{
+			int i = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; i < vectorEnd; i += PixelBatch4.Count) {
+					var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
+					var alpha = batch.BroadcastAlpha ();
+					// result = alpha - color, but keep original alpha
+					var inverted = new PixelBatch4 (alpha.Data - batch.Data);
+					// Restore alpha channel
+					var result = new PixelBatch4 (
+						Vector128.ConditionalSelect (PixelBatch4.AlphaMask.Data, batch.Data, inverted.Data));
+					result.Store (dst.Slice (i, PixelBatch4.Count));
+				}
+			}
+			for (; i < dst.Length; ++i)
+				dst[i] = Apply (src[i]);
+		}
+
+		public override void Apply (Span<ColorBgra> dst)
+		{
+			int i = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; i < vectorEnd; i += PixelBatch4.Count) {
+					var slice = dst.Slice (i, PixelBatch4.Count);
+					var batch = PixelBatch4.Load (slice);
+					var alpha = batch.BroadcastAlpha ();
+					var inverted = new PixelBatch4 (alpha.Data - batch.Data);
+					var result = new PixelBatch4 (
+						Vector128.ConditionalSelect (PixelBatch4.AlphaMask.Data, batch.Data, inverted.Data));
+					result.Store (slice);
+				}
+			}
+			for (; i < dst.Length; ++i)
+				dst[i] = Apply (dst[i]);
 		}
 	}
 
@@ -189,12 +334,44 @@ public static class UnaryPixelOps
 
 	/// <summary>
 	/// Inverts a pixel's color and its alpha component.
+	/// SIMD: bitwise NOT of all channels.
 	/// </summary>
 	[Serializable]
 	public sealed class InvertWithAlpha : UnaryPixelOp
 	{
 		public override ColorBgra Apply (in ColorBgra color)
 			=> ColorBgra.FromBgra ((byte) (255 - color.B), (byte) (255 - color.G), (byte) (255 - color.R), (byte) (255 - color.A));
+
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
+		{
+			int i = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				var allOnes = Vector128.Create ((byte) 255);
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; i < vectorEnd; i += PixelBatch4.Count) {
+					var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
+					new PixelBatch4 (allOnes - batch.Data).Store (dst.Slice (i, PixelBatch4.Count));
+				}
+			}
+			for (; i < dst.Length; ++i)
+				dst[i] = Apply (src[i]);
+		}
+
+		public override void Apply (Span<ColorBgra> dst)
+		{
+			int i = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				var allOnes = Vector128.Create ((byte) 255);
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; i < vectorEnd; i += PixelBatch4.Count) {
+					var slice = dst.Slice (i, PixelBatch4.Count);
+					var batch = PixelBatch4.Load (slice);
+					new PixelBatch4 (allOnes - batch.Data).Store (slice);
+				}
+			}
+			for (; i < dst.Length; ++i)
+				dst[i] = Apply (dst[i]);
+		}
 	}
 
 	/// <summary>
@@ -210,6 +387,10 @@ public static class UnaryPixelOps
 		}
 	}
 
+	/// <summary>
+	/// Desaturates a pixel using luminance weights.
+	/// SIMD: Compute weighted intensity for 4 pixels at a time.
+	/// </summary>
 	[Serializable]
 	public sealed class Desaturate : UnaryPixelOp
 	{
@@ -217,6 +398,69 @@ public static class UnaryPixelOps
 		{
 			byte i = color.GetIntensityByte ();
 			return ColorBgra.FromBgra (i, i, i, color.A);
+		}
+
+		/// <summary>
+		/// SIMD desaturate: compute intensity using integer weights and broadcast to all color channels.
+		/// Uses the weights: B=7471, G=38470, R=19595 (sum=65536, shift by 16).
+		/// </summary>
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
+		{
+			int idx = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; idx < vectorEnd; idx += PixelBatch4.Count) {
+					var batch = PixelBatch4.Load (src.Slice (idx, PixelBatch4.Count));
+					var result = DesaturateBatch (batch);
+					result.Store (dst.Slice (idx, PixelBatch4.Count));
+				}
+			}
+			for (; idx < dst.Length; ++idx)
+				dst[idx] = Apply (src[idx]);
+		}
+
+		public override void Apply (Span<ColorBgra> dst)
+		{
+			int idx = 0;
+			if (Vector128.IsHardwareAccelerated && dst.Length >= PixelBatch4.Count) {
+				int vectorEnd = dst.Length - (dst.Length % PixelBatch4.Count);
+				for (; idx < vectorEnd; idx += PixelBatch4.Count) {
+					var slice = dst.Slice (idx, PixelBatch4.Count);
+					var batch = PixelBatch4.Load (slice);
+					var result = DesaturateBatch (batch);
+					result.Store (slice);
+				}
+			}
+			for (; idx < dst.Length; ++idx)
+				dst[idx] = Apply (dst[idx]);
+		}
+
+		[MethodImpl (MethodImplOptions.AggressiveInlining)]
+		private static PixelBatch4 DesaturateBatch (PixelBatch4 batch)
+		{
+			// Process each pixel's intensity using scalar (the weighted sum
+			// doesn't map cleanly to byte-lane SIMD without deinterleaving)
+			var data = batch.Data.AsUInt32 ();
+			var p0 = Unsafe.BitCast<uint, ColorBgra> (data.GetElement (0));
+			var p1 = Unsafe.BitCast<uint, ColorBgra> (data.GetElement (1));
+			var p2 = Unsafe.BitCast<uint, ColorBgra> (data.GetElement (2));
+			var p3 = Unsafe.BitCast<uint, ColorBgra> (data.GetElement (3));
+
+			byte i0 = p0.GetIntensityByte ();
+			byte i1 = p1.GetIntensityByte ();
+			byte i2 = p2.GetIntensityByte ();
+			byte i3 = p3.GetIntensityByte ();
+
+			var r0 = ColorBgra.FromBgra (i0, i0, i0, p0.A);
+			var r1 = ColorBgra.FromBgra (i1, i1, i1, p1.A);
+			var r2 = ColorBgra.FromBgra (i2, i2, i2, p2.A);
+			var r3 = ColorBgra.FromBgra (i3, i3, i3, p3.A);
+
+			return new PixelBatch4 (Vector128.Create (
+				Unsafe.BitCast<ColorBgra, uint> (r0),
+				Unsafe.BitCast<ColorBgra, uint> (r1),
+				Unsafe.BitCast<ColorBgra, uint> (r2),
+				Unsafe.BitCast<ColorBgra, uint> (r3)).AsByte ());
 		}
 	}
 

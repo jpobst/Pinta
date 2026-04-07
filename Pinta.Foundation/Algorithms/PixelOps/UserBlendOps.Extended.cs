@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
 
 namespace Pinta.Foundation;
 
@@ -24,6 +25,9 @@ partial class UserBlendOps
 			return BlendOpHelper.ComputePremultiplied<ChannelBlend> (bottom, top);
 		}
 
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
+			=> ApplyLoop<BlendOpHelper.PremultipliedBlend<VectorChannelBlend>> (dst, lhs, rhs);
+
 		private readonly struct ChannelBlend : BlendOpHelper.IChannelBlend
 		{
 			[MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -36,11 +40,26 @@ partial class UserBlendOps
 					return Aa * Ab - 2 * (Aa - Ca) * (Ab - Cb);
 			}
 		}
+
+		private readonly struct VectorChannelBlend : IVectorChannelBlend
+		{
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static Vector128<ushort> BlendChannels (
+				Vector128<ushort> Cb, Vector128<ushort> Ca,
+				Vector128<ushort> Ab, Vector128<ushort> Aa)
+			{
+				var two = Vector128.Create ((ushort) 2);
+				var multiply = two * Ca * Cb;
+				var screen = Aa * Ab - two * (Aa - Ca) * (Ab - Cb);
+				var condition = Vector128.LessThan (Ca * two, Aa);
+				return Vector128.ConditionalSelect (condition, multiply, screen);
+			}
+		}
 	}
 
 	/// <summary>
 	/// Soft Light blend mode: a gentler version of Hard Light.
-	/// Uses the W3C compositing spec formula.
+	/// Uses the Pegtop formula. Division-based, uses scalar adapter.
 	/// </summary>
 	[Serializable]
 	public sealed class SoftLightBlendOp : UserBlendOp
@@ -58,6 +77,9 @@ partial class UserBlendOps
 			return BlendOpHelper.ComputePremultiplied<ChannelBlend> (bottom, top);
 		}
 
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
+			=> ApplyLoop<BlendOpHelper.ScalarPremultipliedBlend<ChannelBlend>> (dst, lhs, rhs);
+
 		private readonly struct ChannelBlend : BlendOpHelper.IChannelBlend
 		{
 			[MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -68,7 +90,6 @@ partial class UserBlendOps
 				// All in premultiplied space
 				if (Ab == 0 || Aa == 0) return 0;
 				int twoCA = 2 * Ca;
-				int cbSquared = Cb * Cb;
 				// result = (Ab - 2*Ca/Aa * Ab) * Cb^2 / (Ab*255) + 2*Ca/Aa * Cb
 				// Simplified to avoid division: use Pegtop formula
 				return (Ab * Aa - twoCA * Ab) * Cb / (255 * Aa) * Cb / Ab + twoCA * Cb / Aa;
