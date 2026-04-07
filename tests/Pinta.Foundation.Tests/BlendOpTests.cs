@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Pinta.Foundation;
 
@@ -111,5 +112,161 @@ public class BlendOpTests
 			Assert.That (UserBlendOps.CreateBlendOp (BlendMode.Screen), Is.InstanceOf<UserBlendOps.ScreenBlendOp> ());
 			Assert.That (UserBlendOps.CreateBlendOp (BlendMode.Overlay), Is.InstanceOf<UserBlendOps.OverlayBlendOp> ());
 		});
+	}
+
+	// ============================================================
+	// SIMD batch tests - ensure the vectorized paths produce
+	// identical results to the scalar path for 8+ pixels.
+	// ============================================================
+
+	[Test]
+	public void NormalBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.NormalBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 128);
+	}
+
+	[Test]
+	public void NormalBlend_BatchSimd_AllOpaque ()
+	{
+		var op = new UserBlendOps.NormalBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 255);
+	}
+
+	[Test]
+	public void NormalBlend_BatchSimd_AllTransparent ()
+	{
+		var op = new UserBlendOps.NormalBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 0);
+	}
+
+	[Test]
+	public void MultiplyBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.MultiplyBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void ScreenBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.ScreenBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 180);
+	}
+
+	[Test]
+	public void DarkenBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.DarkenBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void LightenBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.LightenBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void DifferenceBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.DifferenceBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void OverlayBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.OverlayBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void HardLightBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.HardLightBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	/// <summary>
+	/// Creates 8 pixel pairs, runs both scalar (one-at-a-time) and batch SIMD paths,
+	/// and verifies they produce identical results (within ±1 for rounding).
+	/// </summary>
+	private static void AssertBatchMatchesScalar (UserBlendOp op, byte alpha1, byte alpha2)
+	{
+		const int count = 8; // Must be >= 4 to hit SIMD path
+		var lhs = new ColorBgra[count];
+		var rhs = new ColorBgra[count];
+
+		// Create varied pixel data - ensure valid premultiplied alpha (channels ≤ alpha)
+		for (int i = 0; i < count; i++) {
+			lhs[i] = MakePremultiplied ((byte) (i * 30), (byte) (i * 25), (byte) (i * 20), alpha1);
+			rhs[i] = MakePremultiplied ((byte) (255 - i * 30), (byte) (i * 15), (byte) (128 + i * 10), alpha2);
+		}
+
+		// Scalar results
+		var scalarResults = new ColorBgra[count];
+		for (int i = 0; i < count; i++)
+			scalarResults[i] = op.Apply (lhs[i], rhs[i]);
+
+		// SIMD batch results
+		var batchResults = new ColorBgra[count];
+		op.Apply (batchResults, lhs, rhs);
+
+		// Compare
+		for (int i = 0; i < count; i++) {
+			Assert.Multiple (() => {
+				Assert.That (batchResults[i].B, Is.EqualTo (scalarResults[i].B).Within (1), $"Pixel {i} B mismatch");
+				Assert.That (batchResults[i].G, Is.EqualTo (scalarResults[i].G).Within (1), $"Pixel {i} G mismatch");
+				Assert.That (batchResults[i].R, Is.EqualTo (scalarResults[i].R).Within (1), $"Pixel {i} R mismatch");
+				Assert.That (batchResults[i].A, Is.EqualTo (scalarResults[i].A).Within (1), $"Pixel {i} A mismatch");
+			});
+		}
+	}
+
+	[Test]
+	public void NormalBlend_BatchSimd_PartialAlpha_MatchesScalar ()
+	{
+		// Test with semi-transparent pixels to stress the full blend math
+		var op = new UserBlendOps.NormalBlendOp ();
+		const int count = 12; // 4*3 to cover multiple vector batches + remainder
+		var lhs = new ColorBgra[count];
+		var rhs = new ColorBgra[count];
+
+		for (int i = 0; i < count; i++) {
+			byte a1 = (byte) (200 - i * 10);
+			byte a2 = (byte) (50 + i * 15);
+			lhs[i] = MakePremultiplied ((byte) (i * 20), (byte) (i * 15 + 10), (byte) (i * 10 + 20), a1);
+			rhs[i] = MakePremultiplied ((byte) (255 - i * 20), (byte) (i * 10), (byte) (128), a2);
+		}
+
+		var scalarResults = new ColorBgra[count];
+		for (int i = 0; i < count; i++)
+			scalarResults[i] = op.Apply (lhs[i], rhs[i]);
+
+		var batchResults = new ColorBgra[count];
+		op.Apply (batchResults, lhs, rhs);
+
+		for (int i = 0; i < count; i++) {
+			Assert.Multiple (() => {
+				Assert.That (batchResults[i].B, Is.EqualTo (scalarResults[i].B).Within (1), $"Pixel {i} B mismatch");
+				Assert.That (batchResults[i].G, Is.EqualTo (scalarResults[i].G).Within (1), $"Pixel {i} G mismatch");
+				Assert.That (batchResults[i].R, Is.EqualTo (scalarResults[i].R).Within (1), $"Pixel {i} R mismatch");
+				Assert.That (batchResults[i].A, Is.EqualTo (scalarResults[i].A).Within (1), $"Pixel {i} A mismatch");
+			});
+		}
+	}
+
+	/// <summary>
+	/// Creates a valid premultiplied alpha pixel (channels clamped to alpha).
+	/// </summary>
+	private static ColorBgra MakePremultiplied (byte b, byte g, byte r, byte a)
+	{
+		return ColorBgra.FromBgra (
+			Math.Min (b, a),
+			Math.Min (g, a),
+			Math.Min (r, a),
+			a);
 	}
 }
