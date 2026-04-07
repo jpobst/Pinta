@@ -85,7 +85,7 @@ public static class UnaryPixelOps
 		{
 			ColorBgra result = color;
 			result[channel] = set_value;
-			return color;
+			return result;
 		}
 
 		public SetChannel (int channel, byte setValue)
