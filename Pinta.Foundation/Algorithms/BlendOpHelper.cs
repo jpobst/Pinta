@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 
@@ -167,66 +166,4 @@ internal static class BlendOpHelper
 		}
 	}
 
-	/// <summary>
-	/// Adapter for blend ops that can't vectorize their BlendChannel (division-based).
-	/// Uses scalar premultiplied blend per pixel but still benefits from SIMD load/store.
-	/// </summary>
-	internal readonly struct ScalarPremultipliedBlend<TChannelBlend> : IPixelBlend
-		where TChannelBlend : IChannelBlend
-	{
-		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		public static PixelBatch4 Blend4 (PixelBatch4 bottom, PixelBatch4 top)
-		{
-			var botData = bottom.Data.AsUInt32 ();
-			var topData = top.Data.AsUInt32 ();
-
-			var b0 = Unsafe.BitCast<uint, ColorBgra> (botData.GetElement (0));
-			var t0 = Unsafe.BitCast<uint, ColorBgra> (topData.GetElement (0));
-			var r0 = ComputePremultiplied<TChannelBlend> (b0, t0);
-
-			var b1 = Unsafe.BitCast<uint, ColorBgra> (botData.GetElement (1));
-			var t1 = Unsafe.BitCast<uint, ColorBgra> (topData.GetElement (1));
-			var r1 = ComputePremultiplied<TChannelBlend> (b1, t1);
-
-			var b2 = Unsafe.BitCast<uint, ColorBgra> (botData.GetElement (2));
-			var t2 = Unsafe.BitCast<uint, ColorBgra> (topData.GetElement (2));
-			var r2 = ComputePremultiplied<TChannelBlend> (b2, t2);
-
-			var b3 = Unsafe.BitCast<uint, ColorBgra> (botData.GetElement (3));
-			var t3 = Unsafe.BitCast<uint, ColorBgra> (topData.GetElement (3));
-			var r3 = ComputePremultiplied<TChannelBlend> (b3, t3);
-
-			return new PixelBatch4 (Vector128.Create (
-				Unsafe.BitCast<ColorBgra, uint> (r0),
-				Unsafe.BitCast<ColorBgra, uint> (r1),
-				Unsafe.BitCast<ColorBgra, uint> (r2),
-				Unsafe.BitCast<ColorBgra, uint> (r3)).AsByte ());
-		}
-	}
-
-	/// <summary>
-	/// Vector256 scalar adapter: processes 8 pixels individually but benefits from
-	/// SIMD load/store batching.
-	/// </summary>
-	internal readonly struct ScalarPremultipliedBlend256<TChannelBlend> : IPixelBlend8
-		where TChannelBlend : IChannelBlend
-	{
-		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		public static PixelBatch8 Blend8 (PixelBatch8 bottom, PixelBatch8 top)
-		{
-			var botData = bottom.Data.AsUInt32 ();
-			var topData = top.Data.AsUInt32 ();
-
-			Span<uint> results = stackalloc uint[8];
-			for (int i = 0; i < 8; i++) {
-				var b = Unsafe.BitCast<uint, ColorBgra> (botData.GetElement (i));
-				var t = Unsafe.BitCast<uint, ColorBgra> (topData.GetElement (i));
-				results[i] = Unsafe.BitCast<ColorBgra, uint> (ComputePremultiplied<TChannelBlend> (b, t));
-			}
-
-			return new PixelBatch8 (Vector256.Create (
-				results[0], results[1], results[2], results[3],
-				results[4], results[5], results[6], results[7]).AsByte ());
-		}
-	}
 }

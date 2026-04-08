@@ -595,78 +595,6 @@ public static class UnaryPixelOps
 			return ColorBgra.FromBgra (color.B, color.G, ib, color.A);
 		}
 
-		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
-		{
-			int idx = 0;
-			if (Vector256.IsHardwareAccelerated && dst.Length >= PixelBatch8.Count) {
-				int vectorEnd = dst.Length - (dst.Length % PixelBatch8.Count);
-				Span<uint> results = stackalloc uint[8];
-				for (; idx < vectorEnd; idx += PixelBatch8.Count) {
-					var batch = PixelBatch8.Load (src.Slice (idx, PixelBatch8.Count));
-					var data = batch.Data.AsUInt32 ();
-					for (int j = 0; j < 8; j++)
-						results[j] = Unsafe.BitCast<ColorBgra, uint> (
-							Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (j))));
-					new PixelBatch8 (Vector256.Create (
-						results[0], results[1], results[2], results[3],
-						results[4], results[5], results[6], results[7]).AsByte ())
-						.Store (dst.Slice (idx, PixelBatch8.Count));
-				}
-			}
-			if (Vector128.IsHardwareAccelerated && dst.Length - idx >= PixelBatch4.Count) {
-				int vectorEnd = idx + ((dst.Length - idx) / PixelBatch4.Count * PixelBatch4.Count);
-				for (; idx < vectorEnd; idx += PixelBatch4.Count) {
-					var batch = PixelBatch4.Load (src.Slice (idx, PixelBatch4.Count));
-					var data = batch.Data.AsUInt32 ();
-					new PixelBatch4 (Vector128.Create (
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (0)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (1)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (2)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (3))))).AsByte ())
-						.Store (dst.Slice (idx, PixelBatch4.Count));
-				}
-			}
-			for (; idx < dst.Length; ++idx)
-				dst[idx] = Apply (src[idx]);
-		}
-
-		public override void Apply (Span<ColorBgra> dst)
-		{
-			int idx = 0;
-			if (Vector256.IsHardwareAccelerated && dst.Length >= PixelBatch8.Count) {
-				int vectorEnd = dst.Length - (dst.Length % PixelBatch8.Count);
-				Span<uint> results = stackalloc uint[8];
-				for (; idx < vectorEnd; idx += PixelBatch8.Count) {
-					var slice = dst.Slice (idx, PixelBatch8.Count);
-					var batch = PixelBatch8.Load (slice);
-					var data = batch.Data.AsUInt32 ();
-					for (int j = 0; j < 8; j++)
-						results[j] = Unsafe.BitCast<ColorBgra, uint> (
-							Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (j))));
-					new PixelBatch8 (Vector256.Create (
-						results[0], results[1], results[2], results[3],
-						results[4], results[5], results[6], results[7]).AsByte ())
-						.Store (slice);
-				}
-			}
-			if (Vector128.IsHardwareAccelerated && dst.Length - idx >= PixelBatch4.Count) {
-				int vectorEnd = idx + ((dst.Length - idx) / PixelBatch4.Count * PixelBatch4.Count);
-				for (; idx < vectorEnd; idx += PixelBatch4.Count) {
-					var slice = dst.Slice (idx, PixelBatch4.Count);
-					var batch = PixelBatch4.Load (slice);
-					var data = batch.Data.AsUInt32 ();
-					new PixelBatch4 (Vector128.Create (
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (0)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (1)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (2)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (3))))).AsByte ())
-						.Store (slice);
-				}
-			}
-			for (; idx < dst.Length; ++idx)
-				dst[idx] = Apply (dst[idx]);
-		}
-
 		private static int GetSaturation (in ColorBgra color)
 		{
 			double r = (double) color.R / 255;
@@ -747,7 +675,6 @@ public static class UnaryPixelOps
 
 	/// <summary>
 	/// Averages the input color's red, green, and blue channels.
-	/// SIMD: extracts per-pixel, computes average, broadcasts to all 3 channels (Vector128/Vector256).
 	/// </summary>
 	[Serializable]
 	public sealed class AverageChannels : UnaryPixelOp
@@ -756,85 +683,6 @@ public static class UnaryPixelOps
 		{
 			byte average = (byte) ((color.R + color.G + color.B) / 3);
 			return ColorBgra.FromBgra (average, average, average, color.A);
-		}
-
-		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
-		{
-			int i = 0;
-			if (Vector256.IsHardwareAccelerated && dst.Length >= PixelBatch8.Count) {
-				int vectorEnd = dst.Length - (dst.Length % PixelBatch8.Count);
-				for (; i < vectorEnd; i += PixelBatch8.Count) {
-					var batch = PixelBatch8.Load (src.Slice (i, PixelBatch8.Count));
-					AverageBatch8 (batch).Store (dst.Slice (i, PixelBatch8.Count));
-				}
-			}
-			if (Vector128.IsHardwareAccelerated && dst.Length - i >= PixelBatch4.Count) {
-				int vectorEnd = i + ((dst.Length - i) / PixelBatch4.Count * PixelBatch4.Count);
-				for (; i < vectorEnd; i += PixelBatch4.Count) {
-					var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
-					AverageBatch4 (batch).Store (dst.Slice (i, PixelBatch4.Count));
-				}
-			}
-			for (; i < dst.Length; ++i)
-				dst[i] = Apply (src[i]);
-		}
-
-		public override void Apply (Span<ColorBgra> dst)
-		{
-			int i = 0;
-			if (Vector256.IsHardwareAccelerated && dst.Length >= PixelBatch8.Count) {
-				int vectorEnd = dst.Length - (dst.Length % PixelBatch8.Count);
-				for (; i < vectorEnd; i += PixelBatch8.Count) {
-					var slice = dst.Slice (i, PixelBatch8.Count);
-					AverageBatch8 (PixelBatch8.Load (slice)).Store (slice);
-				}
-			}
-			if (Vector128.IsHardwareAccelerated && dst.Length - i >= PixelBatch4.Count) {
-				int vectorEnd = i + ((dst.Length - i) / PixelBatch4.Count * PixelBatch4.Count);
-				for (; i < vectorEnd; i += PixelBatch4.Count) {
-					var slice = dst.Slice (i, PixelBatch4.Count);
-					AverageBatch4 (PixelBatch4.Load (slice)).Store (slice);
-				}
-			}
-			for (; i < dst.Length; ++i)
-				dst[i] = Apply (dst[i]);
-		}
-
-		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		private static PixelBatch4 AverageBatch4 (PixelBatch4 batch)
-		{
-			// Extract individual pixels, compute average, rebuild
-			var data = batch.Data.AsUInt32 ();
-			var p0 = Unsafe.BitCast<uint, ColorBgra> (data.GetElement (0));
-			var p1 = Unsafe.BitCast<uint, ColorBgra> (data.GetElement (1));
-			var p2 = Unsafe.BitCast<uint, ColorBgra> (data.GetElement (2));
-			var p3 = Unsafe.BitCast<uint, ColorBgra> (data.GetElement (3));
-
-			byte a0 = (byte) ((p0.R + p0.G + p0.B) / 3);
-			byte a1 = (byte) ((p1.R + p1.G + p1.B) / 3);
-			byte a2 = (byte) ((p2.R + p2.G + p2.B) / 3);
-			byte a3 = (byte) ((p3.R + p3.G + p3.B) / 3);
-
-			return new PixelBatch4 (Vector128.Create (
-				Unsafe.BitCast<ColorBgra, uint> (ColorBgra.FromBgra (a0, a0, a0, p0.A)),
-				Unsafe.BitCast<ColorBgra, uint> (ColorBgra.FromBgra (a1, a1, a1, p1.A)),
-				Unsafe.BitCast<ColorBgra, uint> (ColorBgra.FromBgra (a2, a2, a2, p2.A)),
-				Unsafe.BitCast<ColorBgra, uint> (ColorBgra.FromBgra (a3, a3, a3, p3.A))).AsByte ());
-		}
-
-		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		private static PixelBatch8 AverageBatch8 (PixelBatch8 batch)
-		{
-			var data = batch.Data.AsUInt32 ();
-			Span<uint> results = stackalloc uint[8];
-			for (int j = 0; j < 8; j++) {
-				var p = Unsafe.BitCast<uint, ColorBgra> (data.GetElement (j));
-				byte avg = (byte) ((p.R + p.G + p.B) / 3);
-				results[j] = Unsafe.BitCast<ColorBgra, uint> (ColorBgra.FromBgra (avg, avg, avg, p.A));
-			}
-			return new PixelBatch8 (Vector256.Create (
-				results[0], results[1], results[2], results[3],
-				results[4], results[5], results[6], results[7]).AsByte ());
 		}
 	}
 
@@ -952,50 +800,6 @@ public static class UnaryPixelOps
 				r: color.R + diff,
 				a: color.A);
 		}
-
-		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
-		{
-			int i = 0;
-			if (Vector256.IsHardwareAccelerated && dst.Length >= PixelBatch8.Count) {
-				int vectorEnd = dst.Length - (dst.Length % PixelBatch8.Count);
-				for (; i < vectorEnd; i += PixelBatch8.Count) {
-					var batch = PixelBatch8.Load (src.Slice (i, PixelBatch8.Count));
-					ApplyLutBatch8 (batch).Store (dst.Slice (i, PixelBatch8.Count));
-				}
-			}
-			if (Vector128.IsHardwareAccelerated && dst.Length - i >= PixelBatch4.Count) {
-				int vectorEnd = i + ((dst.Length - i) / PixelBatch4.Count * PixelBatch4.Count);
-				for (; i < vectorEnd; i += PixelBatch4.Count) {
-					var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
-					ApplyLutBatch4 (batch).Store (dst.Slice (i, PixelBatch4.Count));
-				}
-			}
-			for (; i < dst.Length; ++i)
-				dst[i] = Apply (src[i]);
-		}
-
-		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		private PixelBatch4 ApplyLutBatch4 (PixelBatch4 batch)
-		{
-			var data = batch.Data.AsUInt32 ();
-			return new PixelBatch4 (Vector128.Create (
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (0)))),
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (1)))),
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (2)))),
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (3))))).AsByte ());
-		}
-
-		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		private PixelBatch8 ApplyLutBatch8 (PixelBatch8 batch)
-		{
-			var data = batch.Data.AsUInt32 ();
-			Span<uint> results = stackalloc uint[8];
-			for (int j = 0; j < 8; j++)
-				results[j] = Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (j))));
-			return new PixelBatch8 (Vector256.Create (
-				results[0], results[1], results[2], results[3],
-				results[4], results[5], results[6], results[7]).AsByte ());
-		}
 	}
 
 	[Serializable]
@@ -1026,71 +830,6 @@ public static class UnaryPixelOps
 				g: CurveG[color.G],
 				r: CurveR[color.R],
 				a: color.A);
-
-		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
-		{
-			int i = 0;
-			if (Vector256.IsHardwareAccelerated && dst.Length >= PixelBatch8.Count) {
-				int vectorEnd = dst.Length - (dst.Length % PixelBatch8.Count);
-				for (; i < vectorEnd; i += PixelBatch8.Count) {
-					var batch = PixelBatch8.Load (src.Slice (i, PixelBatch8.Count));
-					ApplyCurveBatch8 (batch).Store (dst.Slice (i, PixelBatch8.Count));
-				}
-			}
-			if (Vector128.IsHardwareAccelerated && dst.Length - i >= PixelBatch4.Count) {
-				int vectorEnd = i + ((dst.Length - i) / PixelBatch4.Count * PixelBatch4.Count);
-				for (; i < vectorEnd; i += PixelBatch4.Count) {
-					var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
-					ApplyCurveBatch4 (batch).Store (dst.Slice (i, PixelBatch4.Count));
-				}
-			}
-			for (; i < dst.Length; ++i)
-				dst[i] = Apply (src[i]);
-		}
-
-		public override void Apply (Span<ColorBgra> dst)
-		{
-			int i = 0;
-			if (Vector256.IsHardwareAccelerated && dst.Length >= PixelBatch8.Count) {
-				int vectorEnd = dst.Length - (dst.Length % PixelBatch8.Count);
-				for (; i < vectorEnd; i += PixelBatch8.Count) {
-					var slice = dst.Slice (i, PixelBatch8.Count);
-					ApplyCurveBatch8 (PixelBatch8.Load (slice)).Store (slice);
-				}
-			}
-			if (Vector128.IsHardwareAccelerated && dst.Length - i >= PixelBatch4.Count) {
-				int vectorEnd = i + ((dst.Length - i) / PixelBatch4.Count * PixelBatch4.Count);
-				for (; i < vectorEnd; i += PixelBatch4.Count) {
-					var slice = dst.Slice (i, PixelBatch4.Count);
-					ApplyCurveBatch4 (PixelBatch4.Load (slice)).Store (slice);
-				}
-			}
-			for (; i < dst.Length; ++i)
-				dst[i] = Apply (dst[i]);
-		}
-
-		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		private PixelBatch4 ApplyCurveBatch4 (PixelBatch4 batch)
-		{
-			var data = batch.Data.AsUInt32 ();
-			return new PixelBatch4 (Vector128.Create (
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (0)))),
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (1)))),
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (2)))),
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (3))))).AsByte ());
-		}
-
-		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		private PixelBatch8 ApplyCurveBatch8 (PixelBatch8 batch)
-		{
-			var data = batch.Data.AsUInt32 ();
-			Span<uint> results = stackalloc uint[8];
-			for (int j = 0; j < 8; j++)
-				results[j] = Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (j))));
-			return new PixelBatch8 (Vector256.Create (
-				results[0], results[1], results[2], results[3],
-				results[4], results[5], results[6], results[7]).AsByte ());
-		}
 	}
 
 	[Serializable]
@@ -1343,79 +1082,6 @@ public static class UnaryPixelOps
 
 			return newColor;
 		}
-
-		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
-		{
-			int i = 0;
-			// Scalar-in-batch: extract pixels, apply scalar, repack for SIMD load/store benefit
-			if (Vector256.IsHardwareAccelerated && dst.Length >= PixelBatch8.Count) {
-				int vectorEnd = dst.Length - (dst.Length % PixelBatch8.Count);
-				Span<uint> results = stackalloc uint[8];
-				for (; i < vectorEnd; i += PixelBatch8.Count) {
-					var batch = PixelBatch8.Load (src.Slice (i, PixelBatch8.Count));
-					var data = batch.Data.AsUInt32 ();
-					for (int j = 0; j < 8; j++)
-						results[j] = Unsafe.BitCast<ColorBgra, uint> (
-							Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (j))));
-					new PixelBatch8 (Vector256.Create (
-						results[0], results[1], results[2], results[3],
-						results[4], results[5], results[6], results[7]).AsByte ())
-						.Store (dst.Slice (i, PixelBatch8.Count));
-				}
-			}
-			if (Vector128.IsHardwareAccelerated && dst.Length - i >= PixelBatch4.Count) {
-				int vectorEnd = i + ((dst.Length - i) / PixelBatch4.Count * PixelBatch4.Count);
-				for (; i < vectorEnd; i += PixelBatch4.Count) {
-					var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
-					var data = batch.Data.AsUInt32 ();
-					new PixelBatch4 (Vector128.Create (
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (0)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (1)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (2)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (3))))).AsByte ())
-						.Store (dst.Slice (i, PixelBatch4.Count));
-				}
-			}
-			for (; i < dst.Length; ++i)
-				dst[i] = Apply (src[i]);
-		}
-
-		public override void Apply (Span<ColorBgra> dst)
-		{
-			int i = 0;
-			if (Vector256.IsHardwareAccelerated && dst.Length >= PixelBatch8.Count) {
-				int vectorEnd = dst.Length - (dst.Length % PixelBatch8.Count);
-				Span<uint> results = stackalloc uint[8];
-				for (; i < vectorEnd; i += PixelBatch8.Count) {
-					var slice = dst.Slice (i, PixelBatch8.Count);
-					var batch = PixelBatch8.Load (slice);
-					var data = batch.Data.AsUInt32 ();
-					for (int j = 0; j < 8; j++)
-						results[j] = Unsafe.BitCast<ColorBgra, uint> (
-							Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (j))));
-					new PixelBatch8 (Vector256.Create (
-						results[0], results[1], results[2], results[3],
-						results[4], results[5], results[6], results[7]).AsByte ())
-						.Store (slice);
-				}
-			}
-			if (Vector128.IsHardwareAccelerated && dst.Length - i >= PixelBatch4.Count) {
-				int vectorEnd = i + ((dst.Length - i) / PixelBatch4.Count * PixelBatch4.Count);
-				for (; i < vectorEnd; i += PixelBatch4.Count) {
-					var slice = dst.Slice (i, PixelBatch4.Count);
-					var batch = PixelBatch4.Load (slice);
-					var data = batch.Data.AsUInt32 ();
-					new PixelBatch4 (Vector128.Create (
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (0)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (1)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (2)))),
-						Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (3))))).AsByte ())
-						.Store (slice);
-				}
-			}
-			for (; i < dst.Length; ++i)
-				dst[i] = Apply (dst[i]);
-		}
 	}
 
 	[Serializable]
@@ -1465,70 +1131,5 @@ public static class UnaryPixelOps
 				g: green_levels[color.G],
 				r: red_levels[color.R],
 				a: color.A);
-
-		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
-		{
-			int i = 0;
-			if (Vector256.IsHardwareAccelerated && dst.Length >= PixelBatch8.Count) {
-				int vectorEnd = dst.Length - (dst.Length % PixelBatch8.Count);
-				for (; i < vectorEnd; i += PixelBatch8.Count) {
-					var batch = PixelBatch8.Load (src.Slice (i, PixelBatch8.Count));
-					ApplyBatch8 (batch).Store (dst.Slice (i, PixelBatch8.Count));
-				}
-			}
-			if (Vector128.IsHardwareAccelerated && dst.Length - i >= PixelBatch4.Count) {
-				int vectorEnd = i + ((dst.Length - i) / PixelBatch4.Count * PixelBatch4.Count);
-				for (; i < vectorEnd; i += PixelBatch4.Count) {
-					var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
-					ApplyBatch4 (batch).Store (dst.Slice (i, PixelBatch4.Count));
-				}
-			}
-			for (; i < dst.Length; ++i)
-				dst[i] = Apply (src[i]);
-		}
-
-		public override void Apply (Span<ColorBgra> dst)
-		{
-			int i = 0;
-			if (Vector256.IsHardwareAccelerated && dst.Length >= PixelBatch8.Count) {
-				int vectorEnd = dst.Length - (dst.Length % PixelBatch8.Count);
-				for (; i < vectorEnd; i += PixelBatch8.Count) {
-					var slice = dst.Slice (i, PixelBatch8.Count);
-					ApplyBatch8 (PixelBatch8.Load (slice)).Store (slice);
-				}
-			}
-			if (Vector128.IsHardwareAccelerated && dst.Length - i >= PixelBatch4.Count) {
-				int vectorEnd = i + ((dst.Length - i) / PixelBatch4.Count * PixelBatch4.Count);
-				for (; i < vectorEnd; i += PixelBatch4.Count) {
-					var slice = dst.Slice (i, PixelBatch4.Count);
-					ApplyBatch4 (PixelBatch4.Load (slice)).Store (slice);
-				}
-			}
-			for (; i < dst.Length; ++i)
-				dst[i] = Apply (dst[i]);
-		}
-
-		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		private PixelBatch4 ApplyBatch4 (PixelBatch4 batch)
-		{
-			var data = batch.Data.AsUInt32 ();
-			return new PixelBatch4 (Vector128.Create (
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (0)))),
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (1)))),
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (2)))),
-				Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (3))))).AsByte ());
-		}
-
-		[MethodImpl (MethodImplOptions.AggressiveInlining)]
-		private PixelBatch8 ApplyBatch8 (PixelBatch8 batch)
-		{
-			var data = batch.Data.AsUInt32 ();
-			Span<uint> results = stackalloc uint[8];
-			for (int j = 0; j < 8; j++)
-				results[j] = Unsafe.BitCast<ColorBgra, uint> (Apply (Unsafe.BitCast<uint, ColorBgra> (data.GetElement (j))));
-			return new PixelBatch8 (Vector256.Create (
-				results[0], results[1], results[2], results[3],
-				results[4], results[5], results[6], results[7]).AsByte ());
-		}
 	}
 }

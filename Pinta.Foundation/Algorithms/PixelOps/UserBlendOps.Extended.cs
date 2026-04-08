@@ -90,10 +90,6 @@ partial class UserBlendOps
 			return BlendOpHelper.ComputePremultiplied<ChannelBlend> (bottom, top);
 		}
 
-		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
-			=> ApplyLoop<BlendOpHelper.ScalarPremultipliedBlend<ChannelBlend>,
-				     BlendOpHelper.ScalarPremultipliedBlend256<ChannelBlend>> (dst, lhs, rhs);
-
 		private readonly struct ChannelBlend : BlendOpHelper.IChannelBlend
 		{
 			[MethodImpl (MethodImplOptions.AggressiveInlining)]
