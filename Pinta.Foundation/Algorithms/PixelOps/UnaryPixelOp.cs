@@ -12,12 +12,21 @@ using System.Runtime.Intrinsics;
 namespace Pinta.Foundation;
 
 /// <summary>
-/// Interface for unary pixel operations that provide vectorized SIMD paths.
+/// Interface for unary pixel operations that provide vectorized SIMD paths (128-bit).
 /// </summary>
 internal interface IUnaryPixelOp
 {
 	/// <summary>Applies the operation to 4 pixels using SIMD.</summary>
 	static abstract PixelBatch4 Apply4 (PixelBatch4 src);
+}
+
+/// <summary>
+/// Interface for unary pixel operations that provide 256-bit SIMD paths.
+/// </summary>
+internal interface IUnaryPixelOp8
+{
+	/// <summary>Applies the operation to 8 pixels using SIMD.</summary>
+	static abstract PixelBatch8 Apply8 (PixelBatch8 src);
 }
 
 /// <summary>
@@ -48,47 +57,67 @@ public abstract class UnaryPixelOp : PixelOp
 
 	/// <summary>
 	/// SIMD-accelerated batch processing loop for unary ops.
-	/// Processes 4 pixels at a time with Vector128, scalar fallback for remainder.
+	/// Processes 8 pixels at a time with Vector256, then 4 with Vector128,
+	/// with scalar fallback for remainder.
 	/// </summary>
 	[MethodImpl (MethodImplOptions.AggressiveInlining)]
-	internal static void ApplyLoop<T> (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
-		where T : IUnaryPixelOp
+	internal void ApplyLoop<T4, T8> (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
+		where T4 : IUnaryPixelOp
+		where T8 : IUnaryPixelOp8
 	{
 		int length = dst.Length;
 		int i = 0;
 
-		if (Vector128.IsHardwareAccelerated && length >= PixelBatch4.Count) {
-			int vectorEnd = length - (length % PixelBatch4.Count);
-			for (; i < vectorEnd; i += PixelBatch4.Count) {
-				var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
-				var result = T.Apply4 (batch);
-				result.Store (dst.Slice (i, PixelBatch4.Count));
+		if (Vector256.IsHardwareAccelerated && length >= PixelBatch8.Count) {
+			int vectorEnd = length - (length % PixelBatch8.Count);
+			for (; i < vectorEnd; i += PixelBatch8.Count) {
+				var batch = PixelBatch8.Load (src.Slice (i, PixelBatch8.Count));
+				T8.Apply8 (batch).Store (dst.Slice (i, PixelBatch8.Count));
 			}
 		}
 
-		// Scalar fallback - not available here since T is IUnaryPixelOp, not a UnaryPixelOp instance
-		// The remaining pixels will be processed in the calling method.
+		if (Vector128.IsHardwareAccelerated && length - i >= PixelBatch4.Count) {
+			int vectorEnd = length - ((length - i) % PixelBatch4.Count);
+			for (; i < vectorEnd; i += PixelBatch4.Count) {
+				var batch = PixelBatch4.Load (src.Slice (i, PixelBatch4.Count));
+				T4.Apply4 (batch).Store (dst.Slice (i, PixelBatch4.Count));
+			}
+		}
+
+		for (; i < length; ++i)
+			dst[i] = Apply (src[i]);
 	}
 
 	/// <summary>
 	/// SIMD-accelerated in-place batch processing loop for unary ops.
+	/// Processes 8 pixels at a time with Vector256, then 4 with Vector128.
 	/// </summary>
 	[MethodImpl (MethodImplOptions.AggressiveInlining)]
-	internal static void ApplyLoopInPlace<T> (Span<ColorBgra> dst)
-		where T : IUnaryPixelOp
+	internal void ApplyLoopInPlace<T4, T8> (Span<ColorBgra> dst)
+		where T4 : IUnaryPixelOp
+		where T8 : IUnaryPixelOp8
 	{
 		int length = dst.Length;
 		int i = 0;
 
-		if (Vector128.IsHardwareAccelerated && length >= PixelBatch4.Count) {
-			int vectorEnd = length - (length % PixelBatch4.Count);
-			for (; i < vectorEnd; i += PixelBatch4.Count) {
-				var slice = dst.Slice (i, PixelBatch4.Count);
-				var batch = PixelBatch4.Load (slice);
-				var result = T.Apply4 (batch);
-				result.Store (slice);
+		if (Vector256.IsHardwareAccelerated && length >= PixelBatch8.Count) {
+			int vectorEnd = length - (length % PixelBatch8.Count);
+			for (; i < vectorEnd; i += PixelBatch8.Count) {
+				var slice = dst.Slice (i, PixelBatch8.Count);
+				T8.Apply8 (PixelBatch8.Load (slice)).Store (slice);
 			}
 		}
+
+		if (Vector128.IsHardwareAccelerated && length - i >= PixelBatch4.Count) {
+			int vectorEnd = length - ((length - i) % PixelBatch4.Count);
+			for (; i < vectorEnd; i += PixelBatch4.Count) {
+				var slice = dst.Slice (i, PixelBatch4.Count);
+				T4.Apply4 (PixelBatch4.Load (slice)).Store (slice);
+			}
+		}
+
+		for (; i < length; ++i)
+			dst[i] = Apply (dst[i]);
 	}
 
 	private void ApplyRectangle (PixelBuffer surface, RectangleI rect)

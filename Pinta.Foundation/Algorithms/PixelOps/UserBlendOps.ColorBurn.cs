@@ -1,9 +1,15 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Pinta.Foundation;
 
 partial class UserBlendOps
 {
+	/// <summary>
+	/// ColorBurn blend mode: darkens the bottom layer to reflect the top layer.
+	/// Formula: 1 - (1-Cb)/Ca (in [0,1] space), or 255 - (255-Cb)*255/Ca in byte space.
+	/// Division-based, uses scalar adapter for SIMD load/store batching.
+	/// </summary>
 	[Serializable]
 	public sealed class ColorBurnBlendOp : UserBlendOp
 	{
@@ -12,50 +18,30 @@ partial class UserBlendOps
 		public override ColorBgra Apply (in ColorBgra lhs, in ColorBgra rhs)
 			=> ApplyStatic (lhs, rhs);
 
-		public static ColorBgra ApplyStatic (in ColorBgra lhs, in ColorBgra rhs)
+		public static ColorBgra ApplyStatic (in ColorBgra bottom, in ColorBgra top)
 		{
-			int lhsA = lhs.A;
-			int rhsA = rhs.A;
-			int y = lhsA * (255 - rhsA) + 0x80;
-			y = ((y >> 8) + y) >> 8;
-			int totalA = y + rhsA;
+			if (top.A == 0) return bottom;
+			if (bottom.A == 0) return top;
 
-			if (totalA == 0) return ColorBgra.FromUInt32 (0);
-
-			int fB = BlendChannel (lhs.B, rhs.B);
-			int fG = BlendChannel (lhs.G, rhs.G);
-			int fR = BlendChannel (lhs.R, rhs.R);
-
-			int x = lhsA * rhsA + 0x80;
-			x = ((x >> 8) + x) >> 8;
-			int z = rhsA - x;
-
-			int masIndex = totalA * 3;
-			uint taM = FoundationUtility.MasTable[masIndex];
-			uint taA = FoundationUtility.MasTable[masIndex + 1];
-			uint taS = FoundationUtility.MasTable[masIndex + 2];
-
-			uint b = (uint) ((((long) (lhs.B * y + rhs.B * z + fB * x) * taM) + taA) >> (int) taS);
-			uint g = (uint) ((((long) (lhs.G * y + rhs.G * z + fG * x) * taM) + taA) >> (int) taS);
-			uint r = (uint) ((((long) (lhs.R * y + rhs.R * z + fR * x) * taM) + taA) >> (int) taS);
-
-			int a = lhsA * (255 - rhsA) + 0x80;
-			a = ((a >> 8) + a) >> 8;
-			a += rhsA;
-
-			return ColorBgra.FromUInt32 (b + (g << 8) + (r << 16) + ((uint) a << 24));
+			return BlendOpHelper.ComputePremultiplied<ChannelBlend> (bottom, top);
 		}
 
-		private static int BlendChannel (int lhsC, int rhsC)
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
+			=> ApplyLoop<BlendOpHelper.ScalarPremultipliedBlend<ChannelBlend>,
+				     BlendOpHelper.ScalarPremultipliedBlend256<ChannelBlend>> (dst, lhs, rhs);
+
+		private readonly struct ChannelBlend : BlendOpHelper.IChannelBlend
 		{
-			if (rhsC == 0) return 0;
-			int i = rhsC * 3;
-			uint M = FoundationUtility.MasTable[i];
-			uint A = FoundationUtility.MasTable[i + 1];
-			uint S = FoundationUtility.MasTable[i + 2];
-			int result = (int) ((((255 - lhsC) * 255 * M) + A) >> (int) S);
-			result = 255 - result;
-			return Math.Max (0, result);
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static int BlendChannel (int Cb, int Ca, int Ab, int Aa)
+			{
+				// ColorBurn in premultiplied: Aa*Ab - min(Aa*Ab, (Ab-Cb)*Aa*Aa/Ca)
+				// When Ca == 0, result is 0
+				if (Ca == 0) return 0;
+				int product = Aa * Ab;
+				int burn = (Ab - Cb) * Aa * Aa / Ca;
+				return Math.Max (0, product - burn);
+			}
 		}
 	}
 }

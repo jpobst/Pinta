@@ -1,9 +1,16 @@
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
 
 namespace Pinta.Foundation;
 
 partial class UserBlendOps
 {
+	/// <summary>
+	/// Xor blend mode: bitwise XOR of pixel channels.
+	/// In premultiplied space: requires unpremultiply, XOR, repremultiply.
+	/// Uses scalar adapter since XOR is not a linear blend operation.
+	/// </summary>
 	[Serializable]
 	public sealed class XorBlendOp : UserBlendOp
 	{
@@ -12,45 +19,32 @@ partial class UserBlendOps
 		public override ColorBgra Apply (in ColorBgra lhs, in ColorBgra rhs)
 			=> ApplyStatic (lhs, rhs);
 
-		public static ColorBgra ApplyStatic (in ColorBgra lhs, in ColorBgra rhs)
+		public static ColorBgra ApplyStatic (in ColorBgra bottom, in ColorBgra top)
 		{
-			int y;
+			if (top.A == 0) return bottom;
+			if (bottom.A == 0) return top;
+
+			return BlendOpHelper.ComputePremultiplied<ChannelBlend> (bottom, top);
+		}
+
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
+			=> ApplyLoop<BlendOpHelper.ScalarPremultipliedBlend<ChannelBlend>,
+				     BlendOpHelper.ScalarPremultipliedBlend256<ChannelBlend>> (dst, lhs, rhs);
+
+		private readonly struct ChannelBlend : BlendOpHelper.IChannelBlend
+		{
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static int BlendChannel (int Cb, int Ca, int Ab, int Aa)
 			{
-				y = lhs.A * (255 - rhs.A) + 0x80;
-				y = ((y >> 8) + y) >> 8;
+				// XOR in premultiplied space requires unpremultiply:
+				// straight_b = Cb * 255 / Ab, straight_a = Ca * 255 / Aa
+				// xor = straight_b ^ straight_a
+				// result = xor * Ab * Aa / 255
+				if (Ab == 0 || Aa == 0) return 0;
+				int straightB = Cb * 255 / Ab;
+				int straightA = Ca * 255 / Aa;
+				return (straightB ^ straightA) * Ab * Aa / (255 * 255);
 			}
-
-			int totalA = y + rhs.A;
-
-			if (totalA == 0) return ColorBgra.FromUInt32 (0);
-
-			int fB = lhs.B ^ rhs.B;
-			int fG = lhs.G ^ rhs.G;
-			int fR = lhs.R ^ rhs.R;
-			int x;
-			{
-				x = lhs.A * rhs.A + 0x80;
-				x = ((x >> 8) + x) >> 8;
-			}
-			int z = rhs.A - x;
-
-			int masIndex = totalA * 3;
-			uint taM = FoundationUtility.MasTable[masIndex];
-			uint taA = FoundationUtility.MasTable[masIndex + 1];
-			uint taS = FoundationUtility.MasTable[masIndex + 2];
-
-			uint b = (uint) (((((lhs.B * y) + (rhs.B * z) + (fB * x)) * taM) + taA) >> (int) taS);
-			uint g = (uint) (((((lhs.G * y) + (rhs.G * z) + (fG * x)) * taM) + taA) >> (int) taS);
-			uint r = (uint) (((((lhs.R * y) + (rhs.R * z) + (fR * x)) * taM) + taA) >> (int) taS);
-
-			int a;
-			{
-				a = lhs.A * (255 - rhs.A) + 0x80;
-				a = ((a >> 8) + a) >> 8;
-				a += rhs.A;
-			}
-
-			return ColorBgra.FromUInt32 (b + (g << 8) + (r << 16) + ((uint) a << 24));
 		}
 	}
 }

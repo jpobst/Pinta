@@ -166,10 +166,16 @@ public abstract class BinaryPixelOp : PixelOp
 		}
 	}
 
+	/// <summary>
+	/// Applies the blend operation in-place: dst[i] = F(dst[i], src[i]).
+	/// Delegates to the 3-arg Apply which subclasses override with SIMD.
+	/// </summary>
 	public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> src)
 	{
-		for (int i = 0; i < src.Length; ++i)
-			dst[i] = Apply (dst[i], src[i]);
+		// Use the 3-arg overload which subclasses override with SIMD.
+		// We need a copy of dst as lhs since src aliases are not allowed.
+		// For most blend ops, the 3-arg Apply is SIMD-accelerated.
+		Apply (dst, (ReadOnlySpan<ColorBgra>) dst, src);
 	}
 
 	public void Apply (PixelBuffer dst, PixelBuffer src)

@@ -1,9 +1,15 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Pinta.Foundation;
 
 partial class UserBlendOps
 {
+	/// <summary>
+	/// Additive blend mode (also known as Linear Dodge).
+	/// In premultiplied space: saturating add clamped to combined alpha.
+	/// Uses scalar adapter since the additive formula can overflow ushort.
+	/// </summary>
 	[Serializable]
 	public sealed class AdditiveBlendOp : UserBlendOp
 	{
@@ -12,38 +18,24 @@ partial class UserBlendOps
 		public override ColorBgra Apply (in ColorBgra lhs, in ColorBgra rhs)
 			=> ApplyStatic (lhs, rhs);
 
-		public static ColorBgra ApplyStatic (in ColorBgra lhs, in ColorBgra rhs)
+		public static ColorBgra ApplyStatic (in ColorBgra bottom, in ColorBgra top)
 		{
-			int lhsA = lhs.A;
-			int rhsA = rhs.A;
-			int y = lhsA * (255 - rhsA) + 0x80;
-			y = ((y >> 8) + y) >> 8;
-			int totalA = y + rhsA;
+			if (top.A == 0) return bottom;
+			if (bottom.A == 0) return top;
 
-			if (totalA == 0) return ColorBgra.FromUInt32 (0);
+			return BlendOpHelper.ComputePremultiplied<ChannelBlend> (bottom, top);
+		}
 
-			int fB = Math.Min (255, lhs.B + rhs.B);
-			int fG = Math.Min (255, lhs.G + rhs.G);
-			int fR = Math.Min (255, lhs.R + rhs.R);
+		public override void Apply (Span<ColorBgra> dst, ReadOnlySpan<ColorBgra> lhs, ReadOnlySpan<ColorBgra> rhs)
+			=> ApplyLoop<BlendOpHelper.ScalarPremultipliedBlend<ChannelBlend>,
+				     BlendOpHelper.ScalarPremultipliedBlend256<ChannelBlend>> (dst, lhs, rhs);
 
-			int x = lhsA * rhsA + 0x80;
-			x = ((x >> 8) + x) >> 8;
-			int z = rhsA - x;
-
-			int masIndex = totalA * 3;
-			uint taM = FoundationUtility.MasTable[masIndex];
-			uint taA = FoundationUtility.MasTable[masIndex + 1];
-			uint taS = FoundationUtility.MasTable[masIndex + 2];
-
-			uint b = (uint) ((((long) (lhs.B * y + rhs.B * z + fB * x) * taM) + taA) >> (int) taS);
-			uint g = (uint) ((((long) (lhs.G * y + rhs.G * z + fG * x) * taM) + taA) >> (int) taS);
-			uint r = (uint) ((((long) (lhs.R * y + rhs.R * z + fR * x) * taM) + taA) >> (int) taS);
-
-			int a = lhsA * (255 - rhsA) + 0x80;
-			a = ((a >> 8) + a) >> 8;
-			a += rhsA;
-
-			return ColorBgra.FromUInt32 (b + (g << 8) + (r << 16) + ((uint) a << 24));
+		private readonly struct ChannelBlend : BlendOpHelper.IChannelBlend
+		{
+			[MethodImpl (MethodImplOptions.AggressiveInlining)]
+			public static int BlendChannel (int Cb, int Ca, int Ab, int Aa)
+				// Additive: sum of both contributions, clamped to combined alpha product
+				=> Math.Min (Ab * Ca + Aa * Cb, Aa * Ab);
 		}
 	}
 }

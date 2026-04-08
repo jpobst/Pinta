@@ -269,4 +269,126 @@ public class BlendOpTests
 			Math.Min (r, a),
 			a);
 	}
+
+	// ============================================================
+	// Tests for newly vectorized blend ops
+	// ============================================================
+
+	[Test]
+	public void AdditiveBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.AdditiveBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void NegationBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.NegationBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void XorBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.XorBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void ColorBurnBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.ColorBurnBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void ColorDodgeBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.ColorDodgeBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void GlowBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.GlowBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void ReflectBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.ReflectBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	[Test]
+	public void SoftLightBlend_BatchSimdMatchesScalar ()
+	{
+		var op = new UserBlendOps.SoftLightBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 255, alpha2: 200);
+	}
+
+	// Test with partial alpha for new blend ops
+	[Test]
+	public void AdditiveBlend_PartialAlpha_MatchesScalar ()
+	{
+		var op = new UserBlendOps.AdditiveBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 180, alpha2: 120);
+	}
+
+	[Test]
+	public void NegationBlend_PartialAlpha_MatchesScalar ()
+	{
+		var op = new UserBlendOps.NegationBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 180, alpha2: 120);
+	}
+
+	[Test]
+	public void ColorBurnBlend_PartialAlpha_MatchesScalar ()
+	{
+		var op = new UserBlendOps.ColorBurnBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 180, alpha2: 120);
+	}
+
+	[Test]
+	public void ColorDodgeBlend_PartialAlpha_MatchesScalar ()
+	{
+		var op = new UserBlendOps.ColorDodgeBlendOp ();
+		AssertBatchMatchesScalar (op, alpha1: 180, alpha2: 120);
+	}
+
+	// ============================================================
+	// Tests for BinaryPixelOp.Apply(dst, src) → delegates to 3-arg
+	// ============================================================
+
+	[Test]
+	public void NormalBlend_TwoArgApply_UsesVectorizedPath ()
+	{
+		var op = new UserBlendOps.NormalBlendOp ();
+		const int count = 8;
+		var dst = new ColorBgra[count];
+		var src = new ColorBgra[count];
+
+		for (int i = 0; i < count; i++) {
+			dst[i] = MakePremultiplied ((byte) (i * 30), (byte) (i * 25), (byte) (i * 20), 255);
+			src[i] = MakePremultiplied ((byte) (255 - i * 30), (byte) (i * 15), (byte) (128 + i * 10), 200);
+		}
+
+		var expected = new ColorBgra[count];
+		for (int i = 0; i < count; i++)
+			expected[i] = op.Apply (dst[i], src[i]);
+
+		op.Apply (dst, src);
+
+		for (int i = 0; i < count; i++) {
+			Assert.Multiple (() => {
+				Assert.That (dst[i].B, Is.EqualTo (expected[i].B).Within (1), $"Pixel {i} B mismatch");
+				Assert.That (dst[i].G, Is.EqualTo (expected[i].G).Within (1), $"Pixel {i} G mismatch");
+				Assert.That (dst[i].R, Is.EqualTo (expected[i].R).Within (1), $"Pixel {i} R mismatch");
+				Assert.That (dst[i].A, Is.EqualTo (expected[i].A).Within (1), $"Pixel {i} A mismatch");
+			});
+		}
+	}
 }
